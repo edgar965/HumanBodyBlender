@@ -985,7 +985,7 @@ def _get_retarget_func():
 
 def _get_cache_dir():
     """Return path to animation cache directory (auto-created)."""
-    d = os.path.join(_HUMANBODY_ROOT, "data", "animations", "cache")
+    d = os.path.join(os.path.dirname(__file__), "cache")
     os.makedirs(d, exist_ok=True)
     return d
 

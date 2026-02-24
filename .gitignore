@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Animation cache (auto-generated .blend files)
+cache/
+
 # IDE
 .vs/
 .vscode/
