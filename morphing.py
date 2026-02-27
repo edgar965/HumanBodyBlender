@@ -261,9 +261,9 @@ class Morpher:
         else:
             self.morphed[:] = self.basis
 
-        # Gender delta
+        # Gender delta — only for Female body types (Male L1s already include it)
         gd = morph_data.gender_delta
-        if gd is not None and abs(self.gender) > 0.001:
+        if gd is not None and abs(self.gender) > 0.001 and not self.body_type.startswith("Male_"):
             numpy.add(self.morphed, gd * self.gender, out=self.morphed)
 
         # L2 1D morphs
