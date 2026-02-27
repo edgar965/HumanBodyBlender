@@ -635,9 +635,6 @@ def _draw_body_type(layout, context):
 
     layout.separator()
 
-    # Gender slider
-    _draw_daz_slider(layout, props, "gender", "Gender")
-
     # Quick Adjust sliders
     _draw_daz_slider(layout, props, "meta_age", "Age")
     _draw_daz_slider(layout, props, "meta_mass", "Mass")

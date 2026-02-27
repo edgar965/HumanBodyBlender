@@ -12,7 +12,6 @@ class HumanBody:
     Usage:
         body = HumanBody(obj)
         body.body_type = "Female_Caucasian"
-        body.gender = 0
         body.age = 25
         body.forearm_length = 0.3
         body.update()
@@ -20,7 +19,7 @@ class HumanBody:
     """
 
     # Core property names (handled via explicit @property)
-    _CORE = {"body_type", "gender", "age", "mass", "tone", "height"}
+    _CORE = {"body_type", "age", "mass", "tone", "height"}
 
     def __init__(self, obj):
         object.__setattr__(self, "_obj", obj)
@@ -45,7 +44,7 @@ class HumanBody:
         return s.replace('__', '_')
 
     # ------------------------------------------------------------------
-    # Core properties (body_type, gender, age, mass, tone)
+    # Core properties (body_type, age, mass, tone, height)
     # ------------------------------------------------------------------
 
     @property
@@ -65,15 +64,9 @@ class HumanBody:
         self._morpher.set_body_type(value)
 
     @property
-    def gender(self):
-        """Gender 0-100 (0=female, 100=male)."""
-        return int(char_defaults.gender.to_display(
-            (self._morpher.gender - 0.5) * 2.0))
-
-    @gender.setter
-    def gender(self, value):
-        self._morpher.set_gender(
-            char_defaults.gender.to_internal(value) / 2.0 + 0.5)
+    def current_gender(self):
+        """Return 'male' or 'female' based on body_type prefix."""
+        return self._morpher.current_gender
 
     @property
     def age(self):
@@ -171,7 +164,6 @@ class HumanBody:
         """Serialize all current values to a dict."""
         d = {
             "body_type": self.body_type,
-            "gender": self.gender,
             "age": self.age,
             "mass": self.mass,
             "tone": self.tone,
@@ -190,8 +182,6 @@ class HumanBody:
         """Restore all values from a dict (as produced by to_dict)."""
         if "body_type" in d:
             self.body_type = d["body_type"]
-        if "gender" in d:
-            self.gender = d["gender"]
         if "age" in d:
             self.age = d["age"]
         if "mass" in d:

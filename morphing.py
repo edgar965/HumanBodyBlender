@@ -122,7 +122,6 @@ class Morpher:
         self.basis = None
         self.morphed = None
         self.body_type = ""
-        self.gender = 0.0
         self.l2_morphs = []
         self.l2_combo = {}
         self._categories = {}
@@ -206,13 +205,17 @@ class Morpher:
                     if node.type == 'BSDF_PRINCIPLED':
                         node.inputs['Base Color'].default_value = (*nr, 1.0)
 
-    def set_gender(self, value):
-        """Set gender slider 0=base, 1=male delta."""
-        self.gender = max(0.0, min(1.0, value))
+    @property
+    def current_gender(self):
+        """Return 'male' or 'female' based on body_type prefix."""
+        return "male" if self.body_type.startswith("Male_") else "female"
 
     def apply_meta_morphs(self):
         """Apply meta morph values (age, mass, tone) to L2 properties."""
-        meta = morph_data.morphs_meta
+        if self.current_gender == "male" and morph_data.morphs_meta_male:
+            meta = morph_data.morphs_meta_male
+        else:
+            meta = morph_data.morphs_meta
         if not meta:
             return
 
@@ -260,18 +263,6 @@ class Morpher:
             self._needs_full_reset = False
         else:
             self.morphed[:] = self.basis
-
-        # Gender delta
-        # Female body types: gender 0→1 adds delta (female→male)
-        # Male body types:   gender 1→0 subtracts delta (male→female)
-        gd = morph_data.gender_delta
-        if gd is not None:
-            if self.body_type.startswith("Male_"):
-                factor = self.gender - 1.0
-            else:
-                factor = self.gender
-            if abs(factor) > 0.001:
-                numpy.add(self.morphed, gd * factor, out=self.morphed)
 
         # L2 1D morphs
         lm = char_defaults.l2_mass

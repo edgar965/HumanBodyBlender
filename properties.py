@@ -22,16 +22,6 @@ class HumanBodyProperties(bpy.types.PropertyGroup):
             return
         m = Morpher.get(obj)
         m.set_body_type(self.body_type)
-        m.set_gender(char_defaults.gender.to_internal(self.gender) / 2.0 + 0.5)
-        m.update()
-
-    @staticmethod
-    def _update_gender(self, context):
-        obj = context.active_object
-        if not obj or obj.type != 'MESH':
-            return
-        m = Morpher.get(obj)
-        m.set_gender(char_defaults.gender.to_internal(self.gender) / 2.0 + 0.5)
         m.update()
 
     @staticmethod
@@ -72,14 +62,6 @@ class HumanBodyProperties(bpy.types.PropertyGroup):
         name="Body Type",
         items=_enum_items_body_types.__func__,
         update=_update_body_type.__func__,
-    )
-    gender: bpy.props.IntProperty(
-        name="Gender",
-        description="0 = Female, 100 = Male",
-        default=char_defaults.gender.default,
-        min=char_defaults.gender.min,
-        max=char_defaults.gender.max,
-        update=_update_gender.__func__,
     )
     # Meta morphs
     meta_age: bpy.props.IntProperty(

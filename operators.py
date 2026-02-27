@@ -190,8 +190,6 @@ class HumanBodyIO:
 
         m = Morpher.get(obj)
         m.set_body_type(props.body_type)
-        m.set_gender(
-            char_defaults.gender.to_internal(props.gender) / 2.0 + 0.5)
         HumanBodyProperties._sync_meta_to_obj(props, obj)
         m.apply_meta_morphs()
         m.update()
@@ -272,8 +270,6 @@ class HumanBodyIO:
         m = Morpher.get(obj)
         props = context.scene.humanbody
         m.set_body_type(props.body_type)
-        m.set_gender(
-            char_defaults.gender.to_internal(props.gender) / 2.0 + 0.5)
         HumanBodyProperties._sync_meta_to_obj(props, obj)
         m.apply_meta_morphs()
         m.update()
@@ -382,7 +378,6 @@ class HumanBodyIO:
 
         data = {
             "body_type": m.body_type,
-            "gender": props.gender,
             "meta_age": props.meta_age,
             "meta_mass": props.meta_mass,
             "meta_tone": props.meta_tone,
@@ -430,10 +425,6 @@ class HumanBodyIO:
         if "body_type" in data:
             props.body_type = data["body_type"]
             m.set_body_type(data["body_type"])
-        if "gender" in data:
-            props.gender = data["gender"]
-            m.set_gender(
-                char_defaults.gender.to_internal(data["gender"]) / 2.0 + 0.5)
         if "meta_age" in data:
             props.meta_age = data["meta_age"]
         if "meta_mass" in data:
