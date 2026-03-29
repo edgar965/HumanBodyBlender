@@ -3,7 +3,9 @@ import os
 import shutil
 
 import bpy
-from .rig_mapping.bone_mapping import HumanFingers, HumanSpine, HumanLeg, HumanArm, HumanSkeleton, SimpleFace
+from humanbody_core.skeleton.mapping import HumanFingers, HumanSpine, HumanLeg, HumanArm, SimpleFace
+from humanbody_core.skeleton.skeleton import Skeleton
+from humanbody_core.skeleton.presets import PresetSkeleton, PresetFinger, get_preset_from_file as _core_get_preset_from_file
 
 PRESETS_SUBDIR = os.path.join("retarget", "humanoid")
 
@@ -50,7 +52,7 @@ def iterate_presets(scene, context):
 
 
 def get_settings_skel(settings):
-    mapping = HumanSkeleton(preset=settings)
+    mapping = Skeleton(preset=settings)
     return mapping
 
 def guessBone(name, attrlist, ik, l, r, number, bones, starwith, dontstarwith, dontcontain, used):
@@ -345,93 +347,9 @@ def validate_preset(armature_data, separator=':'):
                     trg_finger[slot] = with_prefix if with_prefix in armature_data.bones else findBone(bone_name, armature_data.bones)
                 
 
-def get_preset_from_file(filename, settings):
-
-   
-    list_value = dict()
-    try:
-        
-        with open(filename, 'r') as file:
-            
-            for line in file:
-               
-                if "import bpy" in line.strip() or "data.retarget_retarget" in line.strip() or line.strip() == "":
-                    continue
-                sp = line.strip().split(" = ")
-                if len(sp) == 2:
-                    value_test = sp[1].rsplit("'")
-
-                    if len(value_test) > 2:
-                        if 'skeleton.' in sp[0]:
-                            key = sp[0].removeprefix('skeleton.')
-                            value = value_test[1]
-                            if key and value:
-                                list_value[key] = value
-
-    except FileNotFoundError:
-        print(f"Error: The file '{filename}' was not found.")
-        return PresetSkeleton()
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        return PresetSkeleton()
-    
-    
-    if not list_value:
-        return PresetSkeleton()
-  
-    skeleton = settings
-    if not settings:
-        skeleton = PresetSkeleton()
-
-    try:
-        setattr(skeleton, "root" , list_value["root"])
-    except:
-        pass
-
-    for group in ('spine', 'left_arm', 'left_arm_ik', 'right_arm', 'right_arm_ik',
-                    'right_leg', 'right_leg_ik', 'left_leg', 'left_leg_ik', 'face'):
-
-        trg_setting = getattr(skeleton, group)
-        for k in sorted(dir(trg_setting)):
-
-            if not k:
-                continue
-            if k.startswith("__") or k in ["bl_rna", "type", "name"]:
-                continue
-            try:
-                if not 'super_copy' in k:
-                    setattr(trg_setting, k, list_value[group + "." + k])
-
-            except:
-                continue
-
-  
-
-    for group in ('thumb', 'index', 'middle', 'ring', 'pinky'):
-
-        trg_setting = getattr(skeleton.left_fingers, group)
-        for k in sorted(dir(trg_setting)):
-            if not k:
-                continue
-            if k.startswith("__") or k in ["bl_rna", "type", "name"]:
-                continue
-            try:
-                setattr(trg_setting, k, list_value["left_fingers." + group + "." + k])
-            except:
-                continue
-
-        trg_setting = getattr(skeleton.right_fingers, group)
-        for k in sorted(dir(trg_setting)):
-            if not k:
-                continue
-            if k.startswith("__") or k in ["bl_rna", "type", "name"]:
-                continue
-            try:
-                setattr(trg_setting, k, list_value["right_fingers." + group + "." + k])
-            except:
-                continue
-    
-    return skeleton
+def get_preset_from_file(filename, settings=None):
+    """Delegate to humanbody_core implementation."""
+    return _core_get_preset_from_file(filename, settings)
 
     
 def set_preset_skel(preset, context, validate=True):
@@ -472,7 +390,7 @@ def get_preset_skel(preset, settings=None, validate=True):
     if settings and validate:
         validate_preset(settings.id_data)
 
-    mapping = HumanSkeleton(preset=skeleton)
+    mapping = Skeleton(preset=skeleton)
     del skeleton
     
     return mapping
@@ -490,62 +408,4 @@ def reset_preset_names(settings):
     settings.left_fingers.name = 'fingers'
 
 
-class PresetFinger:
-    def __init__(self):
-        self.a = ""
-        self.b = ""
-        self.c = ""
-        self.meta = ""
-
-
-class PresetSkeleton:
-    def __init__(self):
-        self.face = SimpleFace()
-        self.spine = HumanSpine()
-
-        self.left_arm = HumanArm()
-        self.left_arm_ik = HumanArm()
-        self.right_arm = HumanArm()
-        self.right_arm_ik = HumanArm()
-
-        self.right_leg = HumanLeg()
-        self.right_leg_ik = HumanLeg()
-        self.left_leg = HumanLeg()
-        self.left_leg_ik = HumanLeg()
-
-        self.left_fingers = HumanFingers(thumb=PresetFinger(), index=PresetFinger(), middle=PresetFinger(), ring=PresetFinger(), pinky=PresetFinger())
-        self.right_fingers = HumanFingers(thumb=PresetFinger(), index=PresetFinger(), middle=PresetFinger(), ring=PresetFinger(), pinky=PresetFinger())
-        self.root = ""
-
-    def copy(self, settings):
-
-        try:
-            setattr(self, "root" , getattr(settings, "root"))
-        except:
-            pass
-
-        for group in ('spine', 'left_arm', 'left_arm_ik', 'right_arm', 'right_arm_ik',
-                      'right_leg', 'right_leg_ik', 'left_leg', 'left_leg_ik', 'face'):
-            
-            setting = getattr(self, group)
-            trg_setting = getattr(settings, group)
-
-            for k in setting.keys():
-                setattr(setting, k, getattr(trg_setting, k))
-
-        finger_bones = 'a', 'b', 'c', 'meta'
-        for group, trg_grp in zip((self.left_fingers, self.right_fingers),
-                                  (settings.left_fingers, settings.right_fingers)):
-            for k in group.keys():
-                if k == 'name':  # skip Property Group name
-                    continue
-
-                finger = getattr(group, k)
-                trg_finger = getattr(trg_grp, k)
-
-                for i, slot in enumerate(finger_bones):
-                    # preset/settings compatibility: a,b,c against [0], [1], [2]
-                    try:
-                        setattr(finger, slot, getattr(trg_finger, slot))
-                    except AttributeError:
-                        setattr(finger, slot, trg_finger[i])
+# PresetFinger and PresetSkeleton are now imported from humanbody_core.skeleton.presets (see top)

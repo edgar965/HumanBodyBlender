@@ -14,7 +14,7 @@ import mathutils
 from itertools import chain
 
 from .rig_mapping import bone_mapping
-from .rig_mapping.bone_mapping import HumanSkeleton
+from .rig_mapping.bone_mapping import Skeleton, SkeletonRigify, SkeletonMeta
 from . import preset_handler
 from . import bone_utils
 
@@ -969,7 +969,7 @@ class AlignBone(Operator):
             bpy.ops.object.mode_set(mode=current_m)
             return {'FINISHED'}
         
-        trg_skeleton = HumanSkeleton()
+        trg_skeleton = Skeleton()
 
         if not self.same_bone_names:
             if self.trg_preset == "--Current--" and trg_ob.data.retarget_retarget.has_settings():
@@ -1000,7 +1000,7 @@ class AlignBone(Operator):
 
             bone_names_map = dict()
 
-            src_skeleton = HumanSkeleton()
+            src_skeleton = Skeleton()
 
             if not self.same_bone_names:
 
@@ -2844,7 +2844,7 @@ class ExtractMetarig(Operator):
                 src_armature.transform(src_object.matrix_local)
                 src_object.matrix_local = Matrix()
 
-            met_skeleton = bone_mapping.RigifyMeta()
+            met_skeleton = bone_mapping.SkeletonMeta()
 
             bone_names_map = dict()
 
@@ -2863,7 +2863,7 @@ class ExtractMetarig(Operator):
 
 
                 ConvertBoneNaming.rename_bones(src_object, src_skeleton, trg_skeleton, skip_ik=True, reset=False)
-                src_skeleton = bone_mapping.RigifySkeleton()
+                src_skeleton = bone_mapping.SkeletonRigify()
 
                 for name_attr in ('left_eye', 'right_eye'):
                     bone_name = getattr(src_skeleton.face, name_attr)
@@ -4632,7 +4632,7 @@ class ConstrainToArmature(Operator):
 
         trg_ob = context.active_object
 
-        trg_skeleton = HumanSkeleton()
+        trg_skeleton = Skeleton()
 
         if not self.same_bone_names:
 
@@ -4705,7 +4705,7 @@ class ConstrainToArmature(Operator):
             if ob.type != 'ARMATURE':
                 continue
 
-            src_skeleton = HumanSkeleton()
+            src_skeleton = Skeleton()
             src_settings = ob.data.retarget_retarget
 
             if not self.same_bone_names:
