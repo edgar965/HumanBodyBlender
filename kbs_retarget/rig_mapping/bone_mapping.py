@@ -12,7 +12,3 @@ from humanbody_core.skeleton.mapping import (
 from humanbody_core.skeleton.skeleton import (
     Skeleton, SkeletonRigify, SkeletonMeta,
 )
-# Backwards-compat aliases
-HumanSkeleton = Skeleton
-RigifySkeleton = SkeletonRigify
-RigifyMeta = SkeletonMeta
