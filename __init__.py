@@ -3,7 +3,7 @@
 bl_info = {
     "name": "HumanBody",
     "author": "Edgar",
-    "version": (0, 0, 1),
+    "version": (0, 0, 2),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > HumanBody",
     "description": "Parametric human body with Daz3D-style morphing UI",
