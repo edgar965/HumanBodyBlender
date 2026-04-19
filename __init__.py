@@ -6,7 +6,7 @@ bl_info = {
     "version": (0, 0, 38),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > HumanBody",
-    "description": "Parametric human body with Daz3D-style morphing UI",
+    "description": "Parametric Human Body with animation and film creation",
     "category": "Mesh",
 }
 
