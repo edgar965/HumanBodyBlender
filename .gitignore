@@ -17,3 +17,9 @@ nul
 ~WRL*
 .DS_Store
 Thumbs.db
+
+# Visual-Studio-Projektdateien (wie in den Nachbar-Repos, 28.08.2026)
+*.pyproj
+*.pyproj.user
+# Ausgabe eines Testlaufs, die versehentlich hier landet
+t2.json

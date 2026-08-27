@@ -1051,52 +1051,9 @@ def _save_action_cache(bvh_path, act, cache_suffix=""):
         print(f"[Animation] Cache save failed: {e}")
 
 
-def _retarget(context, rig, bvh_path):
-    """Load BVH and retarget using convertDazPoseBvhToBlender (old method)."""
-    retarget = _get_retarget_func()
-    return retarget(context, rig, bvh_path)
 
 
 
-def _flip_animation_180(torso_loc, torso_rot):
-    """Flip animation 180° around Z axis.
-
-    Negates X and Y location keyframes, pre-multiplies rotation by 180° Z.
-    This turns a backward-walking animation into a forward-walking one.
-
-    180° Z quaternion = (w=0, x=0, y=0, z=1).
-    Pre-multiply: (0,0,0,1) @ (qw,qx,qy,qz) = (-qz, -qy, qx, qw).
-    """
-    # Negate X and Y location
-    for idx in (0, 1):
-        fc = torso_loc.get(idx)
-        if fc:
-            for kp in fc.keyframe_points:
-                kp.co[1] = -kp.co[1]
-            fc.update()
-
-    # Pre-multiply rotation by 180° around Z
-    if len(torso_rot) < 4:
-        return
-    fc_w = torso_rot[0]
-    fc_x = torso_rot[1]
-    fc_y = torso_rot[2]
-    fc_z = torso_rot[3]
-
-    n_kp = len(fc_w.keyframe_points)
-    for i in range(n_kp):
-        qw = fc_w.keyframe_points[i].co[1]
-        qx = fc_x.keyframe_points[i].co[1]
-        qy = fc_y.keyframe_points[i].co[1]
-        qz = fc_z.keyframe_points[i].co[1]
-        # (0,0,0,1) @ (qw,qx,qy,qz) = (-qz, -qy, qx, qw)
-        fc_w.keyframe_points[i].co[1] = -qz
-        fc_x.keyframe_points[i].co[1] = -qy
-        fc_y.keyframe_points[i].co[1] = qx
-        fc_z.keyframe_points[i].co[1] = qw
-
-    for fc in torso_rot.values():
-        fc.update()
 
 
 def _set_cloth_viewport(enable):

@@ -2181,5 +2181,14 @@ def unregister():
         bpy.app.handlers.depsgraph_update_post.remove(_depsgraph_handler)
     _depsgraph_handler = None
 
+    # Den Timer mit abmelden (Review 13.08.2026). Er ist einmalig
+    # (`_deferred_mesh_update` gibt auf allen Wegen None zurueck, Blender meldet
+    # ihn danach selbst ab) — das Fenster ist also klein: Wird das Addon in den
+    # 10 ms nach einer Morph-Aenderung deaktiviert, feuert er noch EINMAL und
+    # greift dann auf abgemeldete Klassen zu. Ein Traceback beim Deaktivieren
+    # sieht aus wie ein kaputtes Addon; das ist es nicht wert.
+    if bpy.app.timers.is_registered(_deferred_mesh_update):
+        bpy.app.timers.unregister(_deferred_mesh_update)
+
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)

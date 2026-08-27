@@ -260,7 +260,11 @@ class HUMANBODY_OT_remove_rig(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.active_object
-        if not obj or not obj.data.get("humanbody"):
+        # obj.type PRUEFEN, bevor obj.data angefasst wird: Bei einem Empty ist
+        # obj.data None, und .get() darauf beendet den Operator mit einem
+        # Traceback statt mit der Meldung darunter. HUMANBODY_OT_add_rig macht
+        # es seit jeher richtig, diese drei nicht (Review 13.08.2026).
+        if not obj or obj.type != 'MESH' or not obj.data.get("humanbody"):
             self.report({'ERROR'}, "Select a HumanBody character first")
             return {'CANCELLED'}
 
@@ -306,7 +310,11 @@ class HUMANBODY_OT_load_pose(bpy.types.Operator):
         import json
 
         obj = context.active_object
-        if not obj or not obj.data.get("humanbody"):
+        # obj.type PRUEFEN, bevor obj.data angefasst wird: Bei einem Empty ist
+        # obj.data None, und .get() darauf beendet den Operator mit einem
+        # Traceback statt mit der Meldung darunter. HUMANBODY_OT_add_rig macht
+        # es seit jeher richtig, diese drei nicht (Review 13.08.2026).
+        if not obj or obj.type != 'MESH' or not obj.data.get("humanbody"):
             self.report({'ERROR'}, "Select a HumanBody character")
             return {'CANCELLED'}
 
@@ -383,7 +391,11 @@ class HUMANBODY_OT_clear_pose(bpy.types.Operator):
 
     def execute(self, context):
         obj = context.active_object
-        if not obj or not obj.data.get("humanbody"):
+        # obj.type PRUEFEN, bevor obj.data angefasst wird: Bei einem Empty ist
+        # obj.data None, und .get() darauf beendet den Operator mit einem
+        # Traceback statt mit der Meldung darunter. HUMANBODY_OT_add_rig macht
+        # es seit jeher richtig, diese drei nicht (Review 13.08.2026).
+        if not obj or obj.type != 'MESH' or not obj.data.get("humanbody"):
             return {'CANCELLED'}
 
         rig = _find_rig(obj)

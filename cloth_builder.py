@@ -275,29 +275,6 @@ def _measure_leg_at_z(body, z_target, side='left', z_tol=0.03):
     return (cx, cy, max(max_r, 0.01))
 
 
-def _measure_arm_at_z(body, z_target, side='left', z_tol=0.03):
-    """Return (cx, cy, max_radius) for one arm at height *z_target*.
-
-    Arms extend laterally — side 'left' means x > 0.20.
-    """
-    wverts = _get_body_wverts(body)
-    xs, ys = [], []
-    x_thresh = 0.20
-    for wx, wy, wz in wverts:
-        if abs(wz - z_target) <= z_tol:
-            if side == 'left' and wx >= x_thresh:
-                xs.append(wx)
-                ys.append(wy)
-            elif side == 'right' and wx <= -x_thresh:
-                xs.append(wx)
-                ys.append(wy)
-    if not xs:
-        off = 0.35 if side == 'left' else -0.35
-        return (off, 0.0, 0.04)
-    cx = (min(xs) + max(xs)) * 0.5
-    cy = (min(ys) + max(ys)) * 0.5
-    max_r = max(math.sqrt((x - cx) ** 2 + (y - cy) ** 2) for x, y in zip(xs, ys))
-    return (cx, cy, max(max_r, 0.01))
 
 
 def _measure_arm_at_x(body, x_target, x_tol=0.03, arm_z=1.20, arm_z_tol=0.20):
@@ -447,15 +424,24 @@ def _finish_primitive(context, bm, name, body, pin_verts, thickness=0.002,
 
     *pin_verts* can be a list of BMVerts OR a list of integer indices.
     """
-    bm.verts.ensure_lookup_table()
-    if pin_verts and isinstance(pin_verts[0], int):
-        pin_indices = list(pin_verts)
-    else:
-        pin_indices = [v.index for v in pin_verts] if pin_verts else []
+    # bm.free() im finally (Review 13.08.2026): Die sechzehn `_create_*`-
+    # Funktionen legen den bmesh an und geben ihn NICHT frei — das erledigt
+    # bewusst diese Funktion hier. Damit hängt die Freigabe aber daran, dass
+    # nichts davor scheitert: `ensure_lookup_table`, die Pin-Indizes,
+    # `meshes.new` oder `to_mesh` können werfen, und dann bleibt der bmesh im
+    # Speicher liegen. Blender räumt ihn nicht auf; er hält den Platz bis zum
+    # Beenden. Ein `finally` kostet nichts und schließt alle diese Wege.
+    try:
+        bm.verts.ensure_lookup_table()
+        if pin_verts and isinstance(pin_verts[0], int):
+            pin_indices = list(pin_verts)
+        else:
+            pin_indices = [v.index for v in pin_verts] if pin_verts else []
 
-    mesh = bpy.data.meshes.new(name)
-    bm.to_mesh(mesh)
-    bm.free()
+        mesh = bpy.data.meshes.new(name)
+        bm.to_mesh(mesh)
+    finally:
+        bm.free()
 
     obj = bpy.data.objects.new(name, mesh)
     context.collection.objects.link(obj)
