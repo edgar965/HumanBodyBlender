@@ -121,7 +121,6 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def modal(self, context, event):
-        global _brush_center_3d, _brush_normal_3d, _brush_radius_world
 
         # Viewport navigation pass-through
         if event.type == 'MIDDLEMOUSE':
@@ -187,6 +186,8 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
 
         try:
             context.window.cursor_set('DEFAULT')
+        # stumm gewollt: Den Mauszeiger zuruecksetzen. Ist das Fenster schon
+        # zu, ist der Zeiger es auch.
         except Exception:
             pass
         if context.area:
@@ -262,6 +263,8 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
             # Get current weight
             try:
                 current = vg.weight(v.index)
+            # stumm gewollt: weight() wirft, wenn der Vertex nicht in der
+            # Gruppe ist. Genau das heisst hier Gewicht null.
             except RuntimeError:
                 current = 0.0
 

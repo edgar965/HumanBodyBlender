@@ -5,7 +5,7 @@
 import bpy
 
 from .morphing import Morpher, char_defaults, morph_data, MorphData
-from .hair import EYE_COLORS, HAIR_COLORS
+from .haare.haarfarben import EYE_COLORS, HAIR_COLORS
 
 
 class HumanBodyProperties(bpy.types.PropertyGroup):

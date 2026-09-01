@@ -10,6 +10,7 @@ import bpy
 from .preview import find_body_obj, find_preview, remove_preview
 from .preview import create_preview, create_preview_from_image
 
+from ..pfade import Projektpfade
 logger = logging.getLogger(__name__)
 
 
@@ -41,9 +42,7 @@ def save_asset(context, props):
     category = props.category
 
     # Asset directory (in HumanBody core data)
-    _tools = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    _hb = os.path.join(_tools, "HumanBody") if os.path.isdir(os.path.join(_tools, "HumanBody")) else r"A:\3DTools\HumanBody"
-    assets_dir = os.path.join(_hb, "data", "assets")
+    assets_dir = str(Projektpfade.assets())
     cat_dir = os.path.join(assets_dir, category)
     asset_dir = os.path.join(cat_dir, name)
 
