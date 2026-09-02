@@ -30,7 +30,6 @@ from .morph.morpher import Morpher
 # Sie sehen unbenutzt aus und sind die Weiterleitung.
 from .morph.daten import (  # noqa: F401
     MorphData, CharacterDefaults, char_defaults, morph_data,
-    _nail_color,
 )
 
 

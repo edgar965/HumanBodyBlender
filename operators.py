@@ -6,12 +6,14 @@
 
 import logging
 
+from .klassenanmeldung import Klassenanmeldung
 import bpy
 
 # Die Bauteile liegen in `charakter/`. Hier bleibt, was Blender
 # sieht: die Klassen und die Anmeldung.
 from .charakter.charakterdatei import HumanBodyIO
-from .charakter.materialien import _sync_hb_material_colors
+from .charakter.materialien import Materialien
+from .charakter.morphaktionen import Morphaktionen
 
 
 logger = logging.getLogger(__name__)
@@ -52,7 +54,7 @@ class HUMANBODY_OT_update_morphs(bpy.types.Operator):
     bl_description = "Force-update the mesh from current morph values"
 
     def execute(self, context):
-        if not HumanBodyIO.update_morphs(context):
+        if not Morphaktionen.update_morphs(context):
             return {'CANCELLED'}
         return {'FINISHED'}
 
@@ -64,7 +66,7 @@ class HUMANBODY_OT_reset_morphs(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        if not HumanBodyIO.reset_morphs(context):
+        if not Morphaktionen.reset_morphs(context):
             return {'CANCELLED'}
         return {'FINISHED'}
 
@@ -76,7 +78,7 @@ class HUMANBODY_OT_randomize(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        count, err = HumanBodyIO.randomize(context)
+        count, err = Morphaktionen.randomize(context)
         if err:
             self.report({'WARNING'}, err)
             return {'CANCELLED'}
@@ -93,7 +95,7 @@ class HUMANBODY_OT_finalize(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        ok, msg = HumanBodyIO.finalize(context)
+        ok, msg = Morphaktionen.finalize(context)
         if not ok:
             self.report({'WARNING'}, msg)
             return {'CANCELLED'}
@@ -101,13 +103,24 @@ class HUMANBODY_OT_finalize(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class HUMANBODY_OT_export_character(bpy.types.Operator):
-    bl_idname = "humanbody.export_character"
-    bl_label = "Export"
-    bl_description = "Export character settings to JSON file"
+class MitDateiwahl:
+    u"""Ein Operator, der zuerst Blenders Dateiwaehler oeffnet.
 
-    filepath: bpy.props.StringProperty(
-        subtype='FILE_PATH', default="character.json")
+    `invoke` und `filter_glob` standen in Aus- und Einfuhr gleich. Der
+    Waehler schreibt seinen Pfad nach `self.filepath` und ruft dann
+    `execute` — deshalb bleibt `filepath` in JEDER Klasse selbst stehen
+    (die Ausfuhr gibt einen Vorschlagsnamen mit). Ein Mixin OHNE
+    `bpy.types.Operator` als Basis — siehe `MitKoerper`.
+
+    DASS BLENDER GEERBTE EIGENSCHAFTEN ANMELDET, IST BELEGT: Das
+    mitgelieferte Fremd-Addon `convert/retarget_bvh` (Thomas Larsson)
+    macht genau das — `class BvhFile:` traegt `filter_glob` und
+    `filepath` als reine Python-Klasse, und
+    `MCP_OT_LoadBvh(HideOperator, MultiFile, BvhFile, BvhLoader)` erbt
+    sie. Das Addon laeuft seit Jahren; die Anmeldung sammelt die
+    Annotationen also ueber die ganze Basisklassenkette ein.
+    """
+
     filter_glob: bpy.props.StringProperty(
         default="*.json", options={'HIDDEN'})
 
@@ -115,6 +128,14 @@ class HUMANBODY_OT_export_character(bpy.types.Operator):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
+
+class HUMANBODY_OT_export_character(MitDateiwahl, bpy.types.Operator):
+    bl_idname = "humanbody.export_character"
+    bl_label = "Export"
+    bl_description = "Export character settings to JSON file"
+
+    filepath: bpy.props.StringProperty(
+        subtype='FILE_PATH', default="character.json")
     def execute(self, context):
         ok, path = HumanBodyIO.export_character(context, self.filepath)
         if not ok:
@@ -124,19 +145,12 @@ class HUMANBODY_OT_export_character(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class HUMANBODY_OT_import_settings(bpy.types.Operator):
+class HUMANBODY_OT_import_settings(MitDateiwahl, bpy.types.Operator):
     bl_idname = "humanbody.import_settings"
     bl_label = "Import"
     bl_description = "Import character settings from JSON file"
 
     filepath: bpy.props.StringProperty(subtype='FILE_PATH')
-    filter_glob: bpy.props.StringProperty(
-        default="*.json", options={'HIDDEN'})
-
-    def invoke(self, context, event):
-        context.window_manager.fileselect_add(self)
-        return {'RUNNING_MODAL'}
-
     def execute(self, context):
         ok, msg = HumanBodyIO.import_settings(context, self.filepath)
         if not ok:
@@ -167,13 +181,11 @@ classes = (
 
 
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
-    bpy.app.handlers.depsgraph_update_post.append(_sync_hb_material_colors)
+    Klassenanmeldung.an(classes)
+    bpy.app.handlers.depsgraph_update_post.append(Materialien._sync_hb_material_colors)
 
 
 def unregister():
-    if _sync_hb_material_colors in bpy.app.handlers.depsgraph_update_post:
-        bpy.app.handlers.depsgraph_update_post.remove(_sync_hb_material_colors)
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    if Materialien._sync_hb_material_colors in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(Materialien._sync_hb_material_colors)
+    Klassenanmeldung.ab(classes)

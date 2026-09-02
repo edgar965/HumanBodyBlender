@@ -4,8 +4,8 @@ import logging
 import bpy
 from mathutils import Quaternion
 logger = logging.getLogger(__name__)
-from .rigsuche import _find_rig
-from .rigpfade import _get_poses_dir
+from ..charakter.charakterpruefung import Charakterpruefung
+from .rigpfade import Rigpfade
 
 
 class HUMANBODY_OT_load_pose(bpy.types.Operator):
@@ -19,21 +19,11 @@ class HUMANBODY_OT_load_pose(bpy.types.Operator):
     def execute(self, context):
         import json
 
-        obj = context.active_object
-        # obj.type PRUEFEN, bevor obj.data angefasst wird: Bei einem Empty ist
-        # obj.data None, und .get() darauf beendet den Operator mit einem
-        # Traceback statt mit der Meldung darunter. HUMANBODY_OT_add_rig macht
-        # es seit jeher richtig, diese drei nicht (Review 13.08.2026).
-        if not obj or obj.type != 'MESH' or not obj.data.get("humanbody"):
-            self.report({'ERROR'}, "Select a HumanBody character")
-            return {'CANCELLED'}
-
-        rig = _find_rig(obj)
+        obj, rig = Charakterpruefung.rig_holen(context, self)
         if not rig:
-            self.report({'ERROR'}, "Add a rig first")
             return {'CANCELLED'}
 
-        pose_path = os.path.join(_get_poses_dir(), self.pose_name + ".json")
+        pose_path = os.path.join(Rigpfade._get_poses_dir(), self.pose_name + ".json")
         if not os.path.isfile(pose_path):
             self.report({'ERROR'}, f"Pose not found: {self.pose_name}")
             return {'CANCELLED'}
@@ -47,7 +37,25 @@ class HUMANBODY_OT_load_pose(bpy.types.Operator):
             torso["neck_follow"] = 1.0
             torso["head_follow"] = 1.0
 
-        # Clear current pose — need rig as active object for pose mode
+        self._pose_leeren(context, rig)
+        applied = self._drehungen_setzen(rig, pose_data)
+        self._sitzhoehe(context, rig, torso)
+
+        context.view_layer.update()
+        self.report({'INFO'}, f"Pose '{self.pose_name}' applied ({applied} bones)")
+        return {'FINISHED'}
+
+    # ------------------------------------------------------------ Bausteine
+
+    @staticmethod
+    def _pose_leeren(context, rig):
+        u"""Die aktuelle Pose zuruecksetzen.
+
+        Das geht nur im Posenmodus, und dafuer muss das RIG aktiv sein —
+        nicht das Netz. Die vorige Auswahl wird im `finally`
+        wiederhergestellt, sonst steht der Nutzer nach einem Posenwechsel
+        ploetzlich auf dem Skelett.
+        """
         old_active = context.view_layer.objects.active
         bpy.ops.object.select_all(action='DESELECT')
         rig.select_set(True)
@@ -63,7 +71,14 @@ class HUMANBODY_OT_load_pose(bpy.types.Operator):
             if old_active:
                 context.view_layer.objects.active = old_active
 
-        # Apply Rigify quaternions
+    @staticmethod
+    def _drehungen_setzen(rig, pose_data):
+        u"""Die Quaternionen der Posendatei auf die Knochen legen.
+
+        Knochen, die es im Rig nicht gibt, werden uebergangen: Die
+        Posendateien stammen aus CharMorph und MB-Lab und fuehren Namen,
+        die das Rigify-Rig nicht alle kennt.
+        """
         applied = 0
         for rigify_name, quat_vals in pose_data.items():
             pbone = rig.pose.bones.get(rigify_name)
@@ -72,25 +87,29 @@ class HUMANBODY_OT_load_pose(bpy.types.Operator):
             pbone.rotation_mode = 'QUATERNION'
             pbone.rotation_quaternion = Quaternion(quat_vals)
             applied += 1
+        return applied
 
-        # Adjust torso height for sitting poses
-        if hasattr(context, "evaluated_depsgraph_get"):
-            erig = rig.evaluated_get(context.evaluated_depsgraph_get())
-            if torso:
-                min_z = torso.head[2]
-                for bone in erig.pose.bones:
-                    if not bone.name.startswith("ORG-"):
-                        continue
-                    for attr in ("head", "tail"):
-                        val = getattr(bone, attr)
-                        if val[2] < min_z:
-                            min_z = val[2]
-                min_z = max(min_z, 0)
-                torso.location = (0, 0, -min_z)
+    @staticmethod
+    def _sitzhoehe(context, rig, torso):
+        u"""Den Rumpf so weit anheben, dass nichts unter dem Boden steht.
 
-        context.view_layer.update()
-        self.report({'INFO'}, f"Pose '{self.pose_name}' applied ({applied} bones)")
-        return {'FINISHED'}
+        Bei einer Sitzpose wandern Gesaess und Fuesse unter die
+        Nullebene. Gesucht wird der tiefste Punkt aller `ORG-`-Knochen im
+        AUSGEWERTETEN Rig — also nach der Pose — und der Rumpf um genau
+        so viel angehoben. Steht ohnehin nichts unter null, bleibt es.
+        """
+        if not (torso and hasattr(context, "evaluated_depsgraph_get")):
+            return
+        erig = rig.evaluated_get(context.evaluated_depsgraph_get())
+        min_z = torso.head[2]
+        for bone in erig.pose.bones:
+            if not bone.name.startswith("ORG-"):
+                continue
+            for attr in ("head", "tail"):
+                val = getattr(bone, attr)
+                if val[2] < min_z:
+                    min_z = val[2]
+        torso.location = (0, 0, -max(min_z, 0))
 
 
 class HUMANBODY_OT_clear_pose(bpy.types.Operator):
@@ -100,17 +119,8 @@ class HUMANBODY_OT_clear_pose(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        obj = context.active_object
-        # obj.type PRUEFEN, bevor obj.data angefasst wird: Bei einem Empty ist
-        # obj.data None, und .get() darauf beendet den Operator mit einem
-        # Traceback statt mit der Meldung darunter. HUMANBODY_OT_add_rig macht
-        # es seit jeher richtig, diese drei nicht (Review 13.08.2026).
-        if not obj or obj.type != 'MESH' or not obj.data.get("humanbody"):
-            return {'CANCELLED'}
-
-        rig = _find_rig(obj)
+        _obj, rig = Charakterpruefung.rig_holen(context, self)
         if not rig:
-            self.report({'WARNING'}, "No rig found")
             return {'CANCELLED'}
 
         for pbone in rig.pose.bones:

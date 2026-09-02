@@ -41,12 +41,6 @@ _MAIN_CATEGORIES = [
     ("Legs", 'CONSTRAINT_BONE'),
 ]
 
-
-def _group_category(cat):
-    """Map a detailed category to its main group."""
-    return _CATEGORY_GROUPS.get(cat, "Body")
-
-
 # Rough body zones by world-space vertex position (female basis, standing)
 # Each entry: (z_min, z_max, x_min, x_max, category)
 # Checked top-to-bottom, first match wins
@@ -82,151 +76,160 @@ _BODY_ZONES = [
 ]
 
 
-def _position_to_category(pos):
-    """Map a 3D world position to a body part category."""
-    z, x = pos.z, pos.x
-    for z_min, z_max, x_min, x_max, cat in _BODY_ZONES:
-        if z_min <= z <= z_max and x_min <= x <= x_max:
-            return cat
-    # Fallback: use z-height
-    if z > 1.3:
-        return "Head"
-    if z > 0.9:
-        return "Torso"
-    if z > 0.3:
-        return "Legs"
-    return "Feet"
+class Zonen:
+    u"""Die frueheren Modulfunktionen, gebuendelt."""
 
+    @staticmethod
+    def _group_category(cat):
+        """Map a detailed category to its main group."""
+        return _CATEGORY_GROUPS.get(cat, "Body")
 
-def _build_zone_data(obj, context):
-    """Build zone triangles (for overlay) and face→category map (for raycast).
+    @staticmethod
+    def _position_to_category(pos):
+        """Map a 3D world position to a body part category."""
+        z, x = pos.z, pos.x
+        for z_min, z_max, x_min, x_max, cat in _BODY_ZONES:
+            if z_min <= z <= z_max and x_min <= x <= x_max:
+                return cat
+        # Fallback: use z-height
+        if z > 1.3:
+            return "Head"
+        if z > 0.9:
+            return "Torso"
+        if z > 0.3:
+            return "Legs"
+        return "Feet"
 
-    Uses the evaluated (deformed) mesh for overlay positions, but maps
-    each face to its body zone using the REST-pose center so that picking
-    stays correct regardless of the current pose.
-    """
-    orig_mesh = obj.data
-    mat_w = obj.matrix_world
+    @staticmethod
+    def _build_zone_data(obj, context):
+        """Build zone triangles (for overlay) and face→category map (for raycast).
 
-    # Build face → category map from REST mesh (original, undeformed)
-    face_cat = {}
-    for poly in orig_mesh.polygons:
-        rest_center = mat_w @ poly.center
-        face_cat[poly.index] = _position_to_category(rest_center)
+        Uses the evaluated (deformed) mesh for overlay positions, but maps
+        each face to its body zone using the REST-pose center so that picking
+        stays correct regardless of the current pose.
+        """
+        orig_mesh = obj.data
+        mat_w = obj.matrix_world
 
-    # Build overlay triangles from EVALUATED mesh (deformed by armature)
-    depsgraph = context.evaluated_depsgraph_get()
-    eval_obj = obj.evaluated_get(depsgraph)
-    eval_mesh = eval_obj.data
-    eval_mat = eval_obj.matrix_world
+        # Build face → category map from REST mesh (original, undeformed)
+        face_cat = {}
+        for poly in orig_mesh.polygons:
+            rest_center = mat_w @ poly.center
+            face_cat[poly.index] = Zonen._position_to_category(rest_center)
 
-    tris = {}
-    for poly in eval_mesh.polygons:
-        # Use rest-pose category if face index matches original mesh
-        if poly.index in face_cat:
-            cat = face_cat[poly.index]
-        else:
-            # Fallback for subdivided meshes — use deformed position
-            cat = _position_to_category(eval_mat @ poly.center)
+        # Build overlay triangles from EVALUATED mesh (deformed by armature)
+        depsgraph = context.evaluated_depsgraph_get()
+        eval_obj = obj.evaluated_get(depsgraph)
+        eval_mesh = eval_obj.data
+        eval_mat = eval_obj.matrix_world
 
-        if cat not in tris:
-            tris[cat] = []
+        tris = {}
+        for poly in eval_mesh.polygons:
+            # Use rest-pose category if face index matches original mesh
+            if poly.index in face_cat:
+                cat = face_cat[poly.index]
+            else:
+                # Fallback for subdivided meshes — use deformed position
+                cat = Zonen._position_to_category(eval_mat @ poly.center)
 
-        pverts = [eval_mat @ eval_mesh.vertices[vi].co.copy()
-                  for vi in poly.vertices]
-        for i in range(1, len(pverts) - 1):
-            tris[cat].append((pverts[0], pverts[i], pverts[i + 1]))
+            if cat not in tris:
+                tris[cat] = []
 
-    return tris, face_cat
+            pverts = [eval_mat @ eval_mesh.vertices[vi].co.copy()
+                      for vi in poly.vertices]
+            for i in range(1, len(pverts) - 1):
+                tris[cat].append((pverts[0], pverts[i], pverts[i + 1]))
 
+        return tris, face_cat
 
-def _draw_zone_highlight():
-    """GPU overlay callback: draw translucent highlight over hovered zone."""
+    @staticmethod
+    def _draw_zone_highlight():
+        """GPU overlay callback: draw translucent highlight over hovered zone."""
 
-    if not Anzeigezustand.wahl_laeuft or not Anzeigezustand.kategorie_unter_maus:
-        return
-
-    import gpu
-    from gpu_extras.batch import batch_for_shader
-
-    cat = Anzeigezustand.kategorie_unter_maus
-    if cat not in Anzeigezustand.zonendreiecke:
-        return
-
-    # Rebuild batch only when hovered category changes
-    if Anzeigezustand.stapel is None or Anzeigezustand.stapel_kategorie != cat:
-        coords = []
-        for v0, v1, v2 in Anzeigezustand.zonendreiecke[cat]:
-            coords.extend([v0, v1, v2])
-        if not coords:
+        if not Anzeigezustand.wahl_laeuft or not Anzeigezustand.kategorie_unter_maus:
             return
-        shader = gpu.shader.from_builtin('UNIFORM_COLOR')
-        Anzeigezustand.stapel = batch_for_shader(shader, 'TRIS', {"pos": coords})
-        Anzeigezustand.stapel_kategorie = cat
 
-    shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+        import gpu
+        from gpu_extras.batch import batch_for_shader
 
-    gpu.state.blend_set('ALPHA')
-    gpu.state.depth_test_set('LESS_EQUAL')
-    gpu.state.face_culling_set('NONE')
+        cat = Anzeigezustand.kategorie_unter_maus
+        if cat not in Anzeigezustand.zonendreiecke:
+            return
 
-    shader.bind()
-    shader.uniform_float("color", (0.3, 0.6, 1.0, 0.22))
-    Anzeigezustand.stapel.draw(shader)
-
-    gpu.state.blend_set('NONE')
-    gpu.state.depth_test_set('NONE')
-    gpu.state.face_culling_set('NONE')
-
-
-def _deferred_mesh_update():
-    """Timer callback: apply pending morph update (debounced)."""
-    Anzeigezustand.aktualisierung_offen = False
-
-    if Anzeigezustand.aktualisiert:
-        return None
-    scene = bpy.context.scene
-    if scene is None:
-        return None
-
-    for obj in scene.objects:
-        if obj.type == 'MESH' and obj.data.get("humanbody"):
-            m = Morpher.get(obj)
-            if not m.body_type or m.basis is None:
-                break
-            Anzeigezustand.aktualisiert = True
-            try:
-                m.update()
-            finally:
-                Anzeigezustand.aktualisiert = False
-            break
-    return None
-
-
-def _on_depsgraph_update(scene, depsgraph):
-    """Called after every depsgraph update. Debounces mesh updates."""
-    if Anzeigezustand.aktualisiert or Anzeigezustand.aktualisierung_offen:
-        return
-    if not depsgraph.updates:
-        return
-
-    # Quick hash check BEFORE scheduling timer — avoids unnecessary timer overhead
-    for obj in scene.objects:
-        if obj.type == 'MESH' and obj.data.get("humanbody"):
-            m = Morpher.get(obj)
-            if not m.body_type or m.basis is None:
+        # Rebuild batch only when hovered category changes
+        if Anzeigezustand.stapel is None or Anzeigezustand.stapel_kategorie != cat:
+            coords = []
+            for v0, v1, v2 in Anzeigezustand.zonendreiecke[cat]:
+                coords.extend([v0, v1, v2])
+            if not coords:
                 return
-            obj_data = obj.data
-            h = hash(tuple(
-                obj_data.get("hb_L2_" + morph.name, 0.0)
-                for morph in m.l2_morphs
-            ))
-            if h == Anzeigezustand.letzte_werte:
-                return  # Nothing changed — skip entirely
-            Anzeigezustand.letzte_werte = h
-            break
-    else:
-        return  # No HumanBody object found
+            shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+            Anzeigezustand.stapel = batch_for_shader(shader, 'TRIS', {"pos": coords})
+            Anzeigezustand.stapel_kategorie = cat
 
-    Anzeigezustand.aktualisierung_offen = True
-    bpy.app.timers.register(_deferred_mesh_update, first_interval=0.01)
+        shader = gpu.shader.from_builtin('UNIFORM_COLOR')
+
+        gpu.state.blend_set('ALPHA')
+        gpu.state.depth_test_set('LESS_EQUAL')
+        gpu.state.face_culling_set('NONE')
+
+        shader.bind()
+        shader.uniform_float("color", (0.3, 0.6, 1.0, 0.22))
+        Anzeigezustand.stapel.draw(shader)
+
+        gpu.state.blend_set('NONE')
+        gpu.state.depth_test_set('NONE')
+        gpu.state.face_culling_set('NONE')
+
+    @staticmethod
+    def _deferred_mesh_update():
+        """Timer callback: apply pending morph update (debounced)."""
+        Anzeigezustand.aktualisierung_offen = False
+
+        if Anzeigezustand.aktualisiert:
+            return None
+        scene = bpy.context.scene
+        if scene is None:
+            return None
+
+        for obj in scene.objects:
+            if obj.type == 'MESH' and obj.data.get("humanbody"):
+                m = Morpher.get(obj)
+                if not m.body_type or m.basis is None:
+                    break
+                Anzeigezustand.aktualisiert = True
+                try:
+                    m.update()
+                finally:
+                    Anzeigezustand.aktualisiert = False
+                break
+        return None
+
+    @staticmethod
+    def _on_depsgraph_update(scene, depsgraph):
+        """Called after every depsgraph update. Debounces mesh updates."""
+        if Anzeigezustand.aktualisiert or Anzeigezustand.aktualisierung_offen:
+            return
+        if not depsgraph.updates:
+            return
+
+        # Quick hash check BEFORE scheduling timer — avoids unnecessary timer overhead
+        for obj in scene.objects:
+            if obj.type == 'MESH' and obj.data.get("humanbody"):
+                m = Morpher.get(obj)
+                if not m.body_type or m.basis is None:
+                    return
+                obj_data = obj.data
+                h = hash(tuple(
+                    obj_data.get("hb_L2_" + morph.name, 0.0)
+                    for morph in m.l2_morphs
+                ))
+                if h == Anzeigezustand.letzte_werte:
+                    return  # Nothing changed — skip entirely
+                Anzeigezustand.letzte_werte = h
+                break
+        else:
+            return  # No HumanBody object found
+
+        Anzeigezustand.aktualisierung_offen = True
+        bpy.app.timers.register(Zonen._deferred_mesh_update, first_interval=0.01)

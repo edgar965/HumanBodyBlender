@@ -1,144 +1,164 @@
 # -*- coding: utf-8 -*-
+u"""Ein Kleidungsstueck aus dem Umriss eines Bildes.
+
+AUFGETEILT (01.09.2026)
+=======================
+`create_preview_from_image` war 129 Zeilen. Die fuenf Schritte, die ihr
+Docstring aufzaehlt, sind jetzt fuenf Methoden — vorher standen sie
+untereinander im selben Rumpf, verbunden ueber ein Dutzend
+Zwischenwerte.
+
+Die sieben Werte der Bild-zu-Koerper-Abbildung liegen in
+`bildabbildung.py`; sie wurden vorher einzeln durch drei Aufrufe
+gereicht.
+
+Dabei fiel `remaining_xz` weg: ein Feld mit einer Zeile je Netzpunkt,
+gefuellt in derselben Schleife wie `remaining_z` — und nie gelesen.
+"""
 import logging
-import bpy
+
 import bmesh
 import numpy as np
-from .. import image_analysis
+
+from ..image_analysis import Bildanalyse
+from .bildabbildung import Bildabbildung
+from .drapierung import Drapierung
+from .flaechenwahl import Flaechenwahl
+from .vorschausuche import Vorschausuche
+
 logger = logging.getLogger(__name__)
-from .drapierung import _apply_drape
-from .flaechenwahl import _face_allowed_for_category
-from .drapierung import _finalize_preview
-from .flaechenwahl import _grow_selection
-from .vorschausuche import find_body_obj
-from .vorschausuche import remove_preview
 
 
-def create_preview_from_image(context, props, image_path):
-    """Create a preview mesh using image-based garment detection.
+class Bildvorschau:
+    u"""Der Ablauf vom Bild zum Vorschaunetz."""
 
-    1. Load image → foreground mask
-    2. Project body vertices (x, z) into image space
-    3. Classify faces as covered / not covered
-    4. Compute per-vertex offset weights from silhouette analysis
-    5. Build preview with variable Displace
-    """
-    from mathutils.bvhtree import BVHTree
+    @staticmethod
+    def create_preview_from_image(context, props, image_path):
+        """Create a preview mesh using image-based garment detection.
 
-    body = find_body_obj(context)
-    if not body:
-        return None
+        1. Load image → foreground mask
+        2. Project body vertices (x, z) into image space
+        3. Classify faces as covered / not covered
+        4. Compute per-vertex offset weights from silhouette analysis
+        5. Build preview with variable Displace
+        """
+        gefunden = Vorschausuche.koerpernetz(context)
+        if not gefunden:
+            return None
+        body, eval_obj, eval_mesh = gefunden
+        mat_w = body.matrix_world
 
-    remove_preview(context)
+        body_bvh = Bildvorschau._koerperbaum(eval_mesh)
+        verts_xz = Bildvorschau._punkte_xz(eval_mesh, mat_w)
+        abbildung = Bildabbildung.aus_bild(image_path, props, verts_xz)
 
-    # Load image via Blender
-    bpy_img = bpy.data.images.load(image_path, check_existing=True)
-    pixels = image_analysis.load_image_pixels(bpy_img)
-    h, w = pixels.shape[:2]
+        bm = bmesh.new()
+        bm.from_mesh(eval_mesh)
+        bm.faces.ensure_lookup_table()
+        bm.verts.ensure_lookup_table()
 
-    fg_mask = image_analysis.classify_foreground(
-        pixels, props.image_bg_mode, props.image_threshold)
+        try:
+            if not Bildvorschau._flaechen_waehlen(bm, mat_w, abbildung, props):
+                bm.free()
+                logger.info("Kein Umriss im Bild getroffen — keine Vorschau")
+                return None
 
-    # Evaluated body mesh
-    depsgraph = context.evaluated_depsgraph_get()
-    eval_obj = body.evaluated_get(depsgraph)
-    eval_mesh = eval_obj.to_mesh()
+            offset_weights = Bildvorschau._gewichte(bm, mat_w, verts_xz,
+                                                    abbildung, props)
 
-    # Build BVH from full body mesh (local space) for collision checks
-    bm_body = bmesh.new()
-    bm_body.from_mesh(eval_mesh)
-    body_bvh = BVHTree.FromBMesh(bm_body)
-    bm_body.free()
+            # Garment hull: smooth → collision fix → straight hang
+            Drapierung._apply_drape(bm, mat_w, props.drape, body_bvh)
+        finally:
+            eval_obj.to_mesh_clear()
 
-    mat_w = body.matrix_world
+        return Drapierung._finalize_preview(context, props, bm, body,
+                                            offset_weights=offset_weights)
 
-    # Collect world-space vertex positions
-    n_verts = len(eval_mesh.vertices)
-    verts_world = np.empty((n_verts, 3), dtype=np.float32)
-    for i, v in enumerate(eval_mesh.vertices):
-        co = mat_w @ v.co
-        verts_world[i] = (co.x, co.y, co.z)
+    # ------------------------------------------------------------ Bausteine
 
-    verts_xz = verts_world[:, [0, 2]]  # (N, 2) — x and z
+    @staticmethod
+    def _koerperbaum(eval_mesh):
+        u"""Ein BVH-Baum ueber den GANZEN Koerper — fuer die Kollision.
 
-    # Auto-fit scale
-    body_bounds = image_analysis.compute_body_bounds(verts_xz)
-    sx, sz, ox, oz = image_analysis.auto_fit_scale(body_bounds, fg_mask)
+        Er entsteht vor dem Wegschneiden: Der Stoff muss auch an den
+        Stellen ausweichen, die spaeter nicht mehr zum Kleidungsstueck
+        gehoeren.
+        """
+        from mathutils.bvhtree import BVHTree
 
-    # Apply user scale
-    sx *= props.image_scale
-    sz *= props.image_scale
+        bm_body = bmesh.new()
+        bm_body.from_mesh(eval_mesh)
+        baum = BVHTree.FromBMesh(bm_body)
+        bm_body.free()
+        return baum
 
-    # Build BMesh
-    bm = bmesh.new()
-    bm.from_mesh(eval_mesh)
-    bm.faces.ensure_lookup_table()
-    bm.verts.ensure_lookup_table()
+    @staticmethod
+    def _punkte_xz(eval_mesh, mat_w):
+        u"""Alle Koerperpunkte in Weltkoordinaten, nur (x, z)."""
+        n_verts = len(eval_mesh.vertices)
+        verts_world = np.empty((n_verts, 3), dtype=np.float32)
+        for i, v in enumerate(eval_mesh.vertices):
+            co = mat_w @ v.co
+            verts_world[i] = (co.x, co.y, co.z)
+        return verts_world[:, [0, 2]]      # (N, 2) — x and z
 
-    # Face centers in world space → image UV
-    n_faces = len(bm.faces)
-    face_centers_xz = np.empty((n_faces, 2), dtype=np.float32)
-    for i, face in enumerate(bm.faces):
-        c = mat_w @ face.calc_center_median()
-        face_centers_xz[i] = (c.x, c.z)
+    @staticmethod
+    def _flaechen_waehlen(bm, mat_w, abbildung, props):
+        u"""Alles wegschneiden, was der Bildumriss nicht bedeckt.
 
-    face_uv = image_analysis.vertex_to_image_uv(
-        face_centers_xz, sx, sz, ox, oz, w, h)
+        True, wenn danach noch Flaechen uebrig sind.
+        """
+        # Face centers in world space → image UV
+        n_faces = len(bm.faces)
+        face_centers_xz = np.empty((n_faces, 2), dtype=np.float32)
+        for i, face in enumerate(bm.faces):
+            c = mat_w @ face.calc_center_median()
+            face_centers_xz[i] = (c.x, c.z)
 
-    covered = image_analysis.classify_garment_faces(
-        face_centers_xz, face_uv, fg_mask, w, h)
+        covered = abbildung.bedeckt(face_centers_xz)
 
-    # Select covered faces (with category filter)
-    category = props.category
-    for f in bm.faces:
-        f.select = False
-    for i, face in enumerate(bm.faces):
-        if covered[i]:
-            center = mat_w @ face.calc_center_median()
-            if _face_allowed_for_category(center, category):
-                face.select = True
+        # Select covered faces (with category filter)
+        category = props.category
+        for f in bm.faces:
+            f.select = False
+        for i, face in enumerate(bm.faces):
+            if covered[i]:
+                center = mat_w @ face.calc_center_median()
+                if Flaechenwahl._face_allowed_for_category(center, category):
+                    face.select = True
 
-    _grow_selection(bm, props.grow)
+        Flaechenwahl._grow_selection(bm, props.grow)
 
-    # Delete non-selected
-    faces_to_delete = [f for f in bm.faces if not f.select]
-    bmesh.ops.delete(bm, geom=faces_to_delete, context='FACES')
+        # Delete non-selected
+        faces_to_delete = [f for f in bm.faces if not f.select]
+        bmesh.ops.delete(bm, geom=faces_to_delete, context='FACES')
+        return len(bm.faces) > 0
 
-    if len(bm.faces) == 0:
-        bm.free()
-        eval_obj.to_mesh_clear()
-        return None
+    @staticmethod
+    def _gewichte(bm, mat_w, verts_xz, abbildung, props):
+        u"""Wie weit jeder Punkt vom Koerper absteht — als Gruppengewicht.
 
-    # Compute offset profile
-    bm.verts.ensure_lookup_table()
-    remaining_xz = np.empty((len(bm.verts), 2), dtype=np.float32)
-    remaining_z = np.empty(len(bm.verts), dtype=np.float32)
-    for i, v in enumerate(bm.verts):
-        co = mat_w @ v.co
-        remaining_xz[i] = (co.x, co.z)
-        remaining_z[i] = co.z
+        Der Umriss im Bild sagt je Hoehe, wie weit der Stoff aussteht.
+        Das Gewicht steuert spaeter die Staerke des Displace-Modifikators
+        (0..1 mal Hoechstwert), deshalb wird auf das Verhaeltnis
+        `offset_min / offset_max` umgerechnet: Gewicht 0 ergibt den
+        kleinsten Abstand, Gewicht 1 den groessten.
+        """
+        bm.verts.ensure_lookup_table()
+        remaining_z = np.empty(len(bm.verts), dtype=np.float32)
+        for i, v in enumerate(bm.verts):
+            remaining_z[i] = (mat_w @ v.co).z
 
-    z_values, profile_weights = image_analysis.compute_offset_profile(
-        verts_xz, fg_mask, sx, sz, ox, oz, w, h)
+        z_values, profile_weights = abbildung.profil(verts_xz)
+        per_vert_w = Bildanalyse.interpolate_vertex_weights(
+            remaining_z, z_values, profile_weights)
 
-    per_vert_w = image_analysis.interpolate_vertex_weights(
-        remaining_z, z_values, profile_weights)
+        offset_min = props.image_offset_min
+        offset_max = max(props.image_offset_max, 1e-6)
+        min_ratio = offset_min / offset_max
 
-    # Map: lerp between offset_min and offset_max via weight
-    # The vertex group weight controls Displace strength (0..1 * max_strength)
-    # So we remap: w=0 → offset_min/offset_max, w=1 → 1.0
-    offset_min = props.image_offset_min
-    offset_max = max(props.image_offset_max, 1e-6)
-    min_ratio = offset_min / offset_max
-
-    offset_weights = {}
-    for i in range(len(bm.verts)):
-        raw = float(per_vert_w[i])
-        mapped = min_ratio + raw * (1.0 - min_ratio)
-        offset_weights[i] = mapped
-
-    # Garment hull: smooth → collision fix → straight hang
-    _apply_drape(bm, mat_w, props.drape, body_bvh)
-
-    eval_obj.to_mesh_clear()
-    return _finalize_preview(context, props, bm, body,
-                             offset_weights=offset_weights)
+        offset_weights = {}
+        for i in range(len(bm.verts)):
+            raw = float(per_vert_w[i])
+            offset_weights[i] = min_ratio + raw * (1.0 - min_ratio)
+        return offset_weights

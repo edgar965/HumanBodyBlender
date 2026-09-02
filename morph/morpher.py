@@ -2,8 +2,8 @@
 import logging
 from humanbody_core.morphing import LazyMorph
 logger = logging.getLogger(__name__)
-from .daten import MorphData, _nail_color
-from .daten import char_defaults, morph_data
+from .daten import MorphData
+from .daten import Morphdaten, char_defaults, morph_data
 
 
 class Morpher:
@@ -118,7 +118,7 @@ class Morpher:
                     if node.type == 'BSDF_PRINCIPLED':
                         node.inputs['Base Color'].default_value = (r, g, b, 1.0)
 
-        nr = _nail_color((r, g, b))
+        nr = Morphdaten._nail_color((r, g, b))
         for i in (9, 10):
             if len(mats) > i and mats[i] and mats[i].node_tree:
                 mats[i].diffuse_color = (*nr, 1.0)
@@ -172,22 +172,46 @@ class Morpher:
                 self.obj.data["hb_L2_" + l2_name] = value
 
     def update(self):
-        """Apply all morphs and write to mesh."""
+        """Apply all morphs and write to mesh.
+
+        AUFGETEILT (01.09.2026): Die drei Bloecke sind Methoden, die je
+        EINMAL gerufen werden. Die inneren Schleifen sind unveraendert —
+        sie laufen ueber alle Morphs bei jeder Schieberbewegung, und die
+        lokalen Kurznamen (`is_mass`, `lm_to_int`, `obj_data`) sind
+        Absicht: Ein Attributzugriff je Morph ist hier messbar.
+        """
         if self.basis is None:
             return
 
-        if self.morphed is None or self._needs_full_reset:
-            if self.morphed is None:
-                self.morphed = self.basis.copy()
-            else:
-                self.morphed[:] = self.basis
-            self._needs_full_reset = False
-        else:
-            self.morphed[:] = self.basis
-
-        # L2 1D morphs
-        lm = char_defaults.l2_mass
+        self._ausgangslage()
         obj_data = self.obj.data
+        self._l2_anwenden(obj_data)
+        self._kombi_anwenden(obj_data)
+
+        # Write to Blender mesh
+        self.obj.data.vertices.foreach_set("co", self.morphed.ravel())
+        self.obj.data.update()
+
+    # ------------------------------------------------------------ Bausteine
+
+    def _ausgangslage(self):
+        u"""`morphed` auf das unverformte Netz zuruecksetzen.
+
+        Der `_needs_full_reset`-Zweig unterscheidet sich nur beim
+        allerersten Mal, wenn `morphed` noch gar nicht steht: Dann wird
+        kopiert statt zugewiesen. Danach schreibt `[:]` in das
+        vorhandene Feld — das spart eine Zuteilung je Aktualisierung.
+        """
+        if self.morphed is None:
+            self.morphed = self.basis.copy()
+            self._needs_full_reset = False
+            return
+        self.morphed[:] = self.basis
+        self._needs_full_reset = False
+
+    def _l2_anwenden(self, obj_data):
+        u"""Die eindimensionalen L2-Morphs."""
+        lm = char_defaults.l2_mass
         is_mass = self._is_mass_morph
         lm_default = lm.default
         lm_to_int = lm.to_internal
@@ -204,8 +228,24 @@ class Morpher:
                 continue
             morph.apply(self.morphed, val)
 
-        # L2 2D combo morphs
+    def _kombi_anwenden(self, obj_data):
+        u"""Die zweidimensionalen Kombi-Morphs.
+
+        Ein Kombi-Morph hat je Achse mehrere Teilmorphs; welcher wie
+        stark wirkt, rechnet `_get_combo_item_value` aus den Achswerten.
+        Stehen alle Achsen auf null, wird der ganze Kombi uebersprungen —
+        das ist der haeufige Fall.
+
+        `LazyMorph` wird ERST HIER aufgeloest: Die Morphdaten eines
+        Kombis liegen als Datei vor und werden nur geladen, wenn sein
+        Gewicht ueber der Schwelle liegt.
+        """
+        lm = char_defaults.l2_mass
+        is_mass = self._is_mass_morph
+        lm_default = lm.default
+        lm_to_int = lm.to_internal
         _get_val = MorphData._get_combo_item_value
+
         for combo_name, combo in self.l2_combo.items():
             axis_names = MorphData._enum_combo_names(combo_name)
             values = []
@@ -230,7 +270,3 @@ class Morpher:
                 if isinstance(item, LazyMorph):
                     item = combo._resolve(i)
                 item.apply(self.morphed, weight)
-
-        # Write to Blender mesh
-        self.obj.data.vertices.foreach_set("co", self.morphed.ravel())
-        self.obj.data.update()

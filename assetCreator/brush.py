@@ -2,67 +2,20 @@
 #
 # Brush-mode modal operator for interactive offset weight painting.
 
-import math
 import logging
 
 import bpy
-from mathutils import Vector
 
-from .preview import find_preview
+from ..assetCreator.vorschau.vorschausuche import Vorschausuche
+
+# Die Bauteile liegen in `assetCreator/`. Hier bleibt, was Blender
+# sieht: die Klassen und die Anmeldung.
+from .pinselzeichnung import Pinsel
+from .pinselzustand import Pinselzustand
 
 logger = logging.getLogger(__name__)
 
 # Module-level brush state
-_brush_active = False
-_brush_draw_handler = None
-_brush_center_3d = None
-_brush_normal_3d = None
-_brush_radius_world = 0.03
-
-
-def _draw_brush_circle():
-    """GPU overlay: draw a circle on the mesh surface at the brush position."""
-    if not _brush_active or _brush_center_3d is None:
-        return
-
-    import gpu
-    from gpu_extras.batch import batch_for_shader
-
-    center = _brush_center_3d
-    normal = _brush_normal_3d
-    radius = _brush_radius_world
-
-    # Build a tangent frame on the surface
-    if abs(normal.dot(Vector((0, 0, 1)))) < 0.99:
-        tangent = normal.cross(Vector((0, 0, 1))).normalized()
-    else:
-        tangent = normal.cross(Vector((1, 0, 0))).normalized()
-    bitangent = normal.cross(tangent).normalized()
-
-    # Circle vertices (32 segments)
-    segments = 32
-    coords = []
-    for i in range(segments + 1):
-        angle = 2.0 * math.pi * i / segments
-        pt = (center
-              + tangent * (math.cos(angle) * radius)
-              + bitangent * (math.sin(angle) * radius))
-        coords.append(pt)
-
-    shader = gpu.shader.from_builtin('UNIFORM_COLOR')
-    batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": coords})
-
-    gpu.state.blend_set('ALPHA')
-    gpu.state.depth_test_set('LESS_EQUAL')
-    gpu.state.line_width_set(2.0)
-
-    shader.bind()
-    shader.uniform_float("color", (1.0, 0.6, 0.1, 0.85))
-    batch.draw(shader)
-
-    gpu.state.blend_set('NONE')
-    gpu.state.depth_test_set('NONE')
-    gpu.state.line_width_set(1.0)
 
 
 class HUMANBODY_OT_brush_offset(bpy.types.Operator):
@@ -74,13 +27,11 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        return find_preview(context) is not None
+        return Vorschausuche.find_preview(context) is not None
 
     def invoke(self, context, event):
-        global _brush_active, _brush_draw_handler
-        global _brush_center_3d, _brush_normal_3d, _brush_radius_world
 
-        preview = find_preview(context)
+        preview = Vorschausuche.find_preview(context)
         if not preview:
             self.report({'WARNING'}, "No preview object found")
             return {'CANCELLED'}
@@ -99,18 +50,18 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
 
         # Read brush settings
         ac = context.scene.humanbody_asset_creator
-        _brush_radius_world = ac.brush_radius
+        Pinselzustand.radius = ac.brush_radius
 
         # Install draw handler
-        if _brush_draw_handler is not None:
+        if Pinselzustand.zeichner is not None:
             bpy.types.SpaceView3D.draw_handler_remove(
-                _brush_draw_handler, 'WINDOW')
-        _brush_draw_handler = bpy.types.SpaceView3D.draw_handler_add(
-            _draw_brush_circle, (), 'WINDOW', 'POST_VIEW')
+                Pinselzustand.zeichner, 'WINDOW')
+        Pinselzustand.zeichner = bpy.types.SpaceView3D.draw_handler_add(
+            Pinsel._draw_brush_circle, (), 'WINDOW', 'POST_VIEW')
 
-        _brush_active = True
-        _brush_center_3d = None
-        _brush_normal_3d = None
+        Pinselzustand.aktiv = True
+        Pinselzustand.mitte = None
+        Pinselzustand.normale = None
 
         context.window.cursor_set('PAINT_BRUSH')
         context.area.header_text_set(
@@ -147,17 +98,17 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
                 return {'RUNNING_MODAL'}
 
         if event.type == 'WHEELUPMOUSE':
-            _brush_radius_world = min(_brush_radius_world * 1.15, 0.2)
+            Pinselzustand.radius = min(Pinselzustand.radius * 1.15, 0.2)
             context.scene.humanbody_asset_creator.brush_radius = \
-                _brush_radius_world
+                Pinselzustand.radius
             if context.area:
                 context.area.tag_redraw()
             return {'RUNNING_MODAL'}
 
         if event.type == 'WHEELDOWNMOUSE':
-            _brush_radius_world = max(_brush_radius_world / 1.15, 0.005)
+            Pinselzustand.radius = max(Pinselzustand.radius / 1.15, 0.005)
             context.scene.humanbody_asset_creator.brush_radius = \
-                _brush_radius_world
+                Pinselzustand.radius
             if context.area:
                 context.area.tag_redraw()
             return {'RUNNING_MODAL'}
@@ -172,17 +123,15 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
         self._cleanup(context)
 
     def _cleanup(self, context):
-        global _brush_active, _brush_draw_handler
-        global _brush_center_3d, _brush_normal_3d
 
-        _brush_active = False
-        _brush_center_3d = None
-        _brush_normal_3d = None
+        Pinselzustand.aktiv = False
+        Pinselzustand.mitte = None
+        Pinselzustand.normale = None
 
-        if _brush_draw_handler is not None:
+        if Pinselzustand.zeichner is not None:
             bpy.types.SpaceView3D.draw_handler_remove(
-                _brush_draw_handler, 'WINDOW')
-            _brush_draw_handler = None
+                Pinselzustand.zeichner, 'WINDOW')
+            Pinselzustand.zeichner = None
 
         try:
             context.window.cursor_set('DEFAULT')
@@ -196,7 +145,6 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
 
     def _update_brush_pos(self, context, event):
         """Raycast onto preview mesh and update brush position."""
-        global _brush_center_3d, _brush_normal_3d
 
         from bpy_extras.view3d_utils import (
             region_2d_to_vector_3d, region_2d_to_origin_3d)
@@ -223,16 +171,16 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
 
         hit, loc, normal, _ = eval_obj.ray_cast(ray_origin, ray_dir)
         if hit:
-            _brush_center_3d = eval_obj.matrix_world @ loc
-            _brush_normal_3d = (
+            Pinselzustand.mitte = eval_obj.matrix_world @ loc
+            Pinselzustand.normale = (
                 eval_obj.matrix_world.to_3x3() @ normal).normalized()
         else:
-            _brush_center_3d = None
-            _brush_normal_3d = None
+            Pinselzustand.mitte = None
+            Pinselzustand.normale = None
 
     def _paint_weights(self, context, delta_y):
         """Modify vertex weights within the brush radius."""
-        if _brush_center_3d is None:
+        if Pinselzustand.mitte is None:
             return
 
         preview = self._preview
@@ -240,7 +188,7 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
             return
 
         ac = context.scene.humanbody_asset_creator
-        radius = _brush_radius_world
+        radius = Pinselzustand.radius
         strength = ac.brush_strength
         sign = 1.0 if delta_y > 0 else -1.0
         intensity = min(abs(delta_y) / 50.0, 1.0)
@@ -254,7 +202,7 @@ class HUMANBODY_OT_brush_offset(bpy.types.Operator):
 
         for v in mesh.vertices:
             world_co = mat_w @ v.co
-            dist = (world_co - _brush_center_3d).length
+            dist = (world_co - Pinselzustand.mitte).length
             if dist > radius:
                 continue
 

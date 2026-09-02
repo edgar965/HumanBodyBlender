@@ -51,9 +51,13 @@ char_defaults = CharacterDefaults()
 morph_data = MorphData()
 
 
-def _nail_color(skin_rgb):
-    """Slightly lighter/pinker version of skin color for nails."""
-    r, g, b = skin_rgb
-    return (min(1.0, r * 1.15 + 0.05),
-            min(1.0, g * 0.95 + 0.04),
-            min(1.0, b * 0.9 + 0.03))
+class Morphdaten:
+    u"""Die frueheren Modulfunktionen, gebuendelt."""
+
+    @staticmethod
+    def _nail_color(skin_rgb):
+        """Slightly lighter/pinker version of skin color for nails."""
+        r, g, b = skin_rgb
+        return (min(1.0, r * 1.15 + 0.05),
+                min(1.0, g * 0.95 + 0.04),
+                min(1.0, b * 0.9 + 0.03))

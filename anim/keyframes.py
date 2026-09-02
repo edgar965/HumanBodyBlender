@@ -5,49 +5,68 @@ from mathutils import Quaternion, Euler, Vector
 logger = logging.getLogger(__name__)
 
 
-def _deg(x, y, z):
-    """Euler degrees in bone-local space -> Quaternion.
+class Keyframes:
+    u"""Die frueheren Modulfunktionen, gebuendelt."""
 
-    For spine/head/neck bones (local axes ~ world axes):
-      X rotation: +lean_back / -lean_forward
-      Y rotation: +turn_right / -turn_left
-      Z rotation: +tilt_left  / -tilt_right
+    @staticmethod
+    def _deg(x, y, z):
+        """Euler degrees in bone-local space -> Quaternion.
 
-    For thigh/shin (local X ~ world right):
-      +X = hip/knee flexion (leg forward / knee bend)
-      -X = extension
+        For spine/head/neck bones (local axes ~ world axes):
+          X rotation: +lean_back / -lean_forward
+          Y rotation: +turn_right / -turn_left
+          Z rotation: +tilt_left  / -tilt_right
 
-    For forearm (local X ~ vertical):
-      -X = elbow flexion (bend)
-      +X = elbow extension
-    """
-    return Euler((math.radians(x), math.radians(y), math.radians(z))).to_quaternion()
+        For thigh/shin (local X ~ world right):
+          +X = hip/knee flexion (leg forward / knee bend)
+          -X = extension
 
+        For forearm (local X ~ vertical):
+          -X = elbow flexion (bend)
+          +X = elbow extension
+        """
+        return Euler((math.radians(x), math.radians(y), math.radians(z))).to_quaternion()
 
-def _wrot(pb, *axis_angle_pairs):
-    """World-space rotation(s) -> bone rotation_quaternion.
+    @staticmethod
+    def _wrot(pb, *axis_angle_pairs):
+        """World-space rotation(s) -> bone rotation_quaternion.
 
-    Each pair is ((wx, wy, wz), angle_deg).  Applied in order.
+        Each pair is ((wx, wy, wz), angle_deg).  Applied in order.
 
-    World axes: X = right, Y = forward, Z = up.
-    """
-    world_rot = Quaternion((1, 0, 0, 0))
-    for axis, angle in axis_angle_pairs:
-        world_rot = Quaternion(Vector(axis), math.radians(angle)) @ world_rot
-    rest_q = pb.bone.matrix_local.to_3x3().to_quaternion()
-    return rest_q.conjugated() @ world_rot @ rest_q
+        World axes: X = right, Y = forward, Z = up.
+        """
+        world_rot = Quaternion((1, 0, 0, 0))
+        for axis, angle in axis_angle_pairs:
+            world_rot = Quaternion(Vector(axis), math.radians(angle)) @ world_rot
+        rest_q = pb.bone.matrix_local.to_3x3().to_quaternion()
+        return rest_q.conjugated() @ world_rot @ rest_q
 
+    @staticmethod
+    def _kf(bone, frame):
+        """Insert rotation_quaternion keyframe on *bone* at *frame*."""
+        bone.keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
-def _kf(bone, frame):
-    """Insert rotation_quaternion keyframe on *bone* at *frame*."""
-    bone.keyframe_insert(data_path="rotation_quaternion", frame=frame)
+    @staticmethod
+    def _kf_loc(bone, frame):
+        """Insert location keyframe on *bone* at *frame*."""
+        bone.keyframe_insert(data_path="location", frame=frame)
 
+    #: Die vier Armknochen, die jede Armgeste braucht — in dieser
+    #: Reihenfolge: Oberarm links/rechts, Unterarm links/rechts.
+    ARME = ('upper_arm_fk.L', 'upper_arm_fk.R',
+            'forearm_fk.L', 'forearm_fk.R')
 
-def _kf_loc(bone, frame):
-    """Insert location keyframe on *bone* at *frame*."""
-    bone.keyframe_insert(data_path="location", frame=frame)
+    @staticmethod
+    def armknochen(rig):
+        u"""(Oberarm L, Oberarm R, Unterarm L, Unterarm R), fehlende None.
 
+        Drei Gesten in `gesten_koerper.py` holten sie sich mit vier
+        gleichen Zeilen. Ein Rig ohne FK-Arme liefert hier None statt
+        eines Fehlers — die Gesten pruefen jeden Knochen ohnehin.
+        """
+        return tuple(Keyframes._pb(rig, name) for name in Keyframes.ARME)
 
-def _pb(rig, name):
-    """Get pose bone by name, or None."""
-    return rig.pose.bones.get(name)
+    @staticmethod
+    def _pb(rig, name):
+        """Get pose bone by name, or None."""
+        return rig.pose.bones.get(name)

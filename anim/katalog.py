@@ -131,37 +131,46 @@ _ANIM_CATEGORIES = [
 _PROC_PREFIX = "@proc:"
 
 
-def _list_animations():
-    """Return dict: category -> [(label, path_or_proc_key), ...]
+class Katalog:
+    u"""Die frueheren Modulfunktionen, gebuendelt."""
 
-    Scans BVH directories AND adds procedural animations.
-    Labels come from _BVH_CATALOG if available, otherwise from filename.
-    """
-    result = {}
-    if os.path.isdir(_BVH_DIR):
-        for cat_name, _ in _ANIM_CATEGORIES:
-            cat_dir = os.path.join(_BVH_DIR, cat_name)
-            if not os.path.isdir(cat_dir):
-                continue
-            # Build set of available files in this category
-            available = {}
-            for fname in os.listdir(cat_dir):
-                if fname.endswith(".bvh"):
-                    available[fname[:-4]] = os.path.join(cat_dir, fname)
-            items = []
-            # Add files in catalog order first
-            for stem in _BVH_CATALOG:
-                if stem in available:
-                    items.append((_BVH_CATALOG[stem], available.pop(stem)))
-            # Then any remaining files not in catalog (alphabetical)
-            for stem in sorted(available):
-                items.append((stem.replace("_", " "), available[stem]))
-            if items:
-                result[cat_name] = items
+    @staticmethod
+    def _list_animations():
+        """Return dict: category -> [(label, path_or_proc_key), ...]
 
-    # Add procedural animations by category
-    for key, (label, cat, _func) in _PROCEDURAL_ANIMS.items():
-        cat_list = result.setdefault(cat, [])
-        cat_list.insert(0, (label, _PROC_PREFIX + key))
+        Scans BVH directories AND adds procedural animations.
+        Labels come from _BVH_CATALOG if available, otherwise from filename.
+        """
+        result = {}
+        if os.path.isdir(_BVH_DIR):
+            for cat_name, _ in _ANIM_CATEGORIES:
+                cat_dir = os.path.join(_BVH_DIR, cat_name)
+                if not os.path.isdir(cat_dir):
+                    continue
+                # Build set of available files in this category
+                available = {}
+                for fname in os.listdir(cat_dir):
+                    if fname.endswith(".bvh"):
+                        available[fname[:-4]] = os.path.join(cat_dir, fname)
+                items = []
+                # Add files in catalog order first
+                for stem in _BVH_CATALOG:
+                    if stem in available:
+                        items.append((_BVH_CATALOG[stem], available.pop(stem)))
+                # Then any remaining files not in catalog (alphabetical)
+                for stem in sorted(available):
+                    items.append((stem.replace("_", " "), available[stem]))
+                if items:
+                    result[cat_name] = items
 
-    return result
+        # Add procedural animations by category
+        for key, (label, cat, _func) in _PROCEDURAL_ANIMS.items():
+            cat_list = result.setdefault(cat, [])
+            cat_list.insert(0, (label, _PROC_PREFIX + key))
+
+        return result
+
+
+#: Die frueheren Modulnamen — die Importpfade von
+#: aussen bleiben damit unveraendert.
+_list_animations = Katalog._list_animations

@@ -3007,7 +3007,11 @@ class ExtractMetarig(Operator):
                 match_meta_bone(met_skeleton.right_leg, src_skeleton.right_leg, bone_attr)
                 match_meta_bone(met_skeleton.left_leg, src_skeleton.left_leg, bone_attr)
 
-            rigify_face_bones = bone_mapping.rigify_face_bones
+            # EINE KOPIE (01.09.2026): Die Zeilen darunter entfernen mit
+            # `.remove()` Eintraege. Ohne `list(...)` traf das die
+            # Modulvariable in `humanbody_core`, und der zweite Lauf im
+            # selben Blender sah eine kuerzere Liste — ohne Meldung.
+            rigify_face_bones = list(bone_mapping.rigify_face_bones)
             if self.no_face or (not self.no_face and not self.no_eye):
 
                 for bone_attr in ['left_eye', 'right_eye', 'jaw']:

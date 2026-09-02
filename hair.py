@@ -5,13 +5,14 @@
 
 import logging
 
+from .klassenanmeldung import Klassenanmeldung
 import bpy
 
 # Die Bauteile liegen in `haare/`. Hier bleibt, was Blender
 # sieht: die Klassen und die Anmeldung.
 from .haare.frisurladen import HUMANBODY_OT_load_hairstyle
-from .haare.haarmaterial import _apply_hair_color, _create_hair_material
-from .haare.haarpfade import _ensure_hair_vg
+from .haare.haarmaterial import Haarmaterial
+from .haare.haarpfade import Haarpfade
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +45,33 @@ logger = logging.getLogger(__name__)
 # Operators
 # ---------------------------------------------------------------------------
 
-class HUMANBODY_OT_create_hair(bpy.types.Operator):
+class MitNetz:
+    u"""Ein Haaroperator, der auf dem aktiven Netz arbeitet.
+
+    Die drei Zeilen standen DREIMAL — in `create_hair`, `remove_hair`
+    und `recolor_hair`. Sie bleiben bewusst stumm: Haare sind eine
+    Handlung auf dem ausgewaehlten Objekt, und ein Fehlerfenster, weil
+    gerade eine Kamera aktiv ist, waere laestiger als der ausbleibende
+    Knopfdruck. Ein Mixin OHNE `bpy.types.Operator` als Basis — siehe
+    `MitKoerper` in `koerperoperator.py`.
+    """
+
+    @staticmethod
+    def netz(context):
+        u"""Das aktive Netz — oder `None`."""
+        obj = context.active_object
+        return obj if obj and obj.type == 'MESH' else None
+
+
+class HUMANBODY_OT_create_hair(MitNetz, bpy.types.Operator):
     bl_idname = "humanbody.create_hair"
     bl_label = "Create Hair"
     bl_description = "Add procedural particle hair to the character"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        obj = context.active_object
-        if not obj or obj.type != 'MESH':
+        obj = self.netz(context)
+        if not obj:
             return {'CANCELLED'}
 
         props = context.scene.humanbody
@@ -65,11 +84,11 @@ class HUMANBODY_OT_create_hair(bpy.types.Operator):
                 return {'CANCELLED'}
 
         # Ensure hair vertex group
-        vg = _ensure_hair_vg(obj)
+        vg = Haarpfade._ensure_hair_vg(obj)
 
         # Create hair material
         mat_name = "HumanBody_Hair"
-        mat = _create_hair_material(mat_name, color_key)
+        mat = Haarmaterial._create_hair_material(mat_name, color_key)
         obj.data.materials.append(mat)
         mat_slot = len(obj.data.materials)
 
@@ -98,15 +117,15 @@ class HUMANBODY_OT_create_hair(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class HUMANBODY_OT_remove_hair(bpy.types.Operator):
+class HUMANBODY_OT_remove_hair(MitNetz, bpy.types.Operator):
     bl_idname = "humanbody.remove_hair"
     bl_label = "Remove Hair"
     bl_description = "Remove particle hair system from the character"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        obj = context.active_object
-        if not obj or obj.type != 'MESH':
+        obj = self.netz(context)
+        if not obj:
             return {'CANCELLED'}
 
         removed = False
@@ -137,15 +156,15 @@ class HUMANBODY_OT_remove_hair(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class HUMANBODY_OT_recolor_hair(bpy.types.Operator):
+class HUMANBODY_OT_recolor_hair(MitNetz, bpy.types.Operator):
     bl_idname = "humanbody.recolor_hair"
     bl_label = "Apply Color"
     bl_description = "Change hair color to selected preset"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        obj = context.active_object
-        if not obj or obj.type != 'MESH':
+        obj = self.netz(context)
+        if not obj:
             return {'CANCELLED'}
 
         props = context.scene.humanbody
@@ -154,7 +173,7 @@ class HUMANBODY_OT_recolor_hair(bpy.types.Operator):
         # Recolor hair on body itself
         for mat in obj.data.materials:
             if mat and mat.name.startswith("HumanBody_Hair"):
-                _apply_hair_color(mat, props.hair_color)
+                Haarmaterial._apply_hair_color(mat, props.hair_color)
                 found = True
 
         # Recolor hair asset objects
@@ -162,7 +181,7 @@ class HUMANBODY_OT_recolor_hair(bpy.types.Operator):
             if o.get("humanbody_hair"):
                 for mat in o.data.materials:
                     if mat and mat.name.startswith("HumanBody_Hair"):
-                        _apply_hair_color(mat, props.hair_color)
+                        Haarmaterial._apply_hair_color(mat, props.hair_color)
                         found = True
 
         if found:
@@ -186,10 +205,8 @@ classes = (
 
 
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
+    Klassenanmeldung.an(classes)
 
 
 def unregister():
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    Klassenanmeldung.ab(classes)

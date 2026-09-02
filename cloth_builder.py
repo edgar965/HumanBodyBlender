@@ -5,16 +5,19 @@
 
 import logging
 
+from .klassenanmeldung import Klassenanmeldung
 import bpy
 
 # Die Bauteile liegen in `cloth/`. Hier bleibt, was Blender
 # sieht: die Klassen und die Anmeldung.
+from .cloth.stofffelder_grundform import HumanBodyClothPrimitiveProps
+from .cloth.stofffelder_schablone import HumanBodyClothTemplateProps
 from .cloth.eigenschaften import (
-    HumanBodyClothBuilderProps, HumanBodyClothPrimitiveProps,
-    HumanBodyClothTemplateProps,
+    HumanBodyClothBuilderProps,
 )
+from .cloth.schablonenoperator import HUMANBODY_OT_cloth_tpl_create
 from .cloth.erzeugoperatoren import (
-    HUMANBODY_OT_cloth_prim_create, HUMANBODY_OT_cloth_tpl_create,
+    HUMANBODY_OT_cloth_prim_create,
 )
 from .cloth.operatoren import (
     HUMANBODY_OT_cloth_add, HUMANBODY_OT_cloth_add_pin,
@@ -116,8 +119,7 @@ classes = (
 
 
 def register():
-    for cls in classes:
-        bpy.utils.register_class(cls)
+    Klassenanmeldung.an(classes)
     bpy.types.Scene.humanbody_cloth_builder = bpy.props.PointerProperty(
         type=HumanBodyClothBuilderProps)
     bpy.types.Scene.humanbody_cloth_primitive = bpy.props.PointerProperty(
@@ -130,5 +132,4 @@ def unregister():
     del bpy.types.Scene.humanbody_cloth_template
     del bpy.types.Scene.humanbody_cloth_primitive
     del bpy.types.Scene.humanbody_cloth_builder
-    for cls in reversed(classes):
-        bpy.utils.unregister_class(cls)
+    Klassenanmeldung.ab(classes)

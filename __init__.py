@@ -12,7 +12,8 @@ bl_info = {
 
 import bpy
 from . import morphing, properties, operators
-from . import rig, animation, hair, wardrobe, cloth_builder, ui
+from . import rig, animation, hair, cloth_builder, ui
+from . import wardrobe
 from . import assetCreator as asset_creator
 
 

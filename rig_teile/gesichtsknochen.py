@@ -15,21 +15,25 @@ _FACE_DEFORM_BONES = [
 ]
 
 
-def _enable_face_deform_bones(rig):
-    """Enable use_deform on MCH/ORG bones that carry NPZ face weights."""
-    count = 0
-    for bname in _FACE_DEFORM_BONES:
-        bone = rig.data.bones.get(bname)
-        if bone and not bone.use_deform:
-            bone.use_deform = True
-            count += 1
-    if count:
-        logger.info("Enabled use_deform on %d face bones (MCH/ORG)", count)
+class Gesichtsknochen:
+    u"""Die frueheren Modulfunktionen, gebuendelt."""
 
+    @staticmethod
+    def _enable_face_deform_bones(rig):
+        """Enable use_deform on MCH/ORG bones that carry NPZ face weights."""
+        count = 0
+        for bname in _FACE_DEFORM_BONES:
+            bone = rig.data.bones.get(bname)
+            if bone and not bone.use_deform:
+                bone.use_deform = True
+                count += 1
+        if count:
+            logger.info("Enabled use_deform on %d face bones (MCH/ORG)", count)
 
-def _setup_rigify_properties(rig):
-    """Set Rigify custom properties for FK pose mode."""
-    torso = rig.pose.bones.get("torso")
-    if torso:
-        torso["neck_follow"] = 1.0
-        torso["head_follow"] = 1.0
+    @staticmethod
+    def _setup_rigify_properties(rig):
+        """Set Rigify custom properties for FK pose mode."""
+        torso = rig.pose.bones.get("torso")
+        if torso:
+            torso["neck_follow"] = 1.0
+            torso["head_follow"] = 1.0

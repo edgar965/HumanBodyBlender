@@ -1,196 +1,208 @@
 # -*- coding: utf-8 -*-
-from ..rig import _find_rig, _list_poses
-from ..animation import _list_animations, _ANIM_CATEGORIES, _PROC_PREFIX
-from ..haare.haarpfade import _list_hairstyles
-from .zeichnen_koerper import _poll_humanbody
+from ..rig_teile.rigsuche import Rigsuche
+from ..anim.katalog import Katalog, _ANIM_CATEGORIES, _PROC_PREFIX
+from ..haare.haarpfade import Haarpfade
+from .zeichnen_koerper import Koerperseite
 
 
-def _draw_hair_body(layout, context):
-    """Draw logic for the Hair / Brows / Lashes panel."""
-    import bpy as _bpy
-    props = context.scene.humanbody
-    obj = context.active_object
+class Weitereseite:
+    u"""Die frueheren Modulfunktionen, gebuendelt."""
 
-    layout.separator()
+    @staticmethod
+    def _draw_hair_body(layout, context):
+        """Draw logic for the Hair / Brows / Lashes panel."""
+        import bpy as _bpy
+        props = context.scene.humanbody
+        obj = context.active_object
 
-    # ---- Hair ----
-    # Check if any hair exists (on body or as hair object)
-    has_hair = False
-    if obj:
-        for ps in obj.particle_systems:
-            if ps.settings.type == 'HAIR':
-                has_hair = True
-                break
-    if not has_hair:
-        for o in _bpy.data.objects:
-            if o.get("humanbody_hair"):
-                has_hair = True
-                break
-
-    # Hair color
-    layout.prop(props, "hair_color")
-
-    # Hair assets (from .blend files)
-    assets = _list_hairstyles()
-    if assets:
         layout.separator()
-        layout.label(text="Hair Assets:", icon='ASSET_MANAGER')
-        col = layout.column(align=True)
-        for key, label in assets:
-            icon = 'STRANDS' if 'particle' in key else 'MESH_DATA'
-            op = col.operator("humanbody.load_hairstyle",
-                              text=label, icon=icon)
-            op.asset_key = key
 
-    layout.separator()
+        # ---- Hair ----
+        # Check if any hair exists (on body or as hair object)
+        has_hair = False
+        if obj:
+            for ps in obj.particle_systems:
+                if ps.settings.type == 'HAIR':
+                    has_hair = True
+                    break
+        if not has_hair:
+            for o in _bpy.data.objects:
+                if o.get("humanbody_hair"):
+                    has_hair = True
+                    break
 
-    # Procedural hair section
-    layout.label(text="Procedural:", icon='OUTLINER_OB_CURVES')
-    layout.prop(props, "hair_length")
-    layout.prop(props, "hair_count")
-    row = layout.row(align=True)
-    row.operator("humanbody.create_hair", icon='STRANDS')
+        # Hair color
+        layout.prop(props, "hair_color")
 
-    layout.separator()
+        # Hair assets (from .blend files)
+        assets = Haarpfade._list_hairstyles()
+        if assets:
+            layout.separator()
+            layout.label(text="Hair Assets:", icon='ASSET_MANAGER')
+            col = layout.column(align=True)
+            for key, label in assets:
+                icon = 'STRANDS' if 'particle' in key else 'MESH_DATA'
+                op = col.operator("humanbody.load_hairstyle",
+                                  text=label, icon=icon)
+                op.asset_key = key
 
-    # Remove / Recolor
-    if has_hair:
+        layout.separator()
+
+        # Procedural hair section
+        layout.label(text="Procedural:", icon='OUTLINER_OB_CURVES')
+        layout.prop(props, "hair_length")
+        layout.prop(props, "hair_count")
         row = layout.row(align=True)
-        row.operator("humanbody.recolor_hair", icon='COLOR')
-        row.operator("humanbody.remove_hair", icon='X')
+        row.operator("humanbody.create_hair", icon='STRANDS')
 
+        layout.separator()
 
-def _draw_rig_body(layout, context):
-    """Draw logic for the Rig panel."""
-    obj = context.active_object
-    rig = _find_rig(obj) if obj else None
+        # Remove / Recolor
+        if has_hair:
+            row = layout.row(align=True)
+            row.operator("humanbody.recolor_hair", icon='COLOR')
+            row.operator("humanbody.remove_hair", icon='X')
 
-    if rig:
-        layout.label(text=f"Rig: {rig.name} ({len(rig.data.bones)} bones)",
-                     icon='ARMATURE_DATA')
-        layout.operator("humanbody.remove_rig", text="Remove Rig", icon='X')
-    else:
-        layout.label(text="No rig attached", icon='INFO')
-        layout.operator("humanbody.add_rig", text="Add Rig",
-                        icon='ARMATURE_DATA')
+    @staticmethod
+    def _draw_rig_body(layout, context):
+        """Draw logic for the Rig panel."""
+        obj = context.active_object
+        rig = Rigsuche._find_rig(obj) if obj else None
 
+        if rig:
+            layout.label(text=f"Rig: {rig.name} ({len(rig.data.bones)} bones)",
+                         icon='ARMATURE_DATA')
+            layout.operator("humanbody.remove_rig", text="Remove Rig", icon='X')
+        else:
+            layout.label(text="No rig attached", icon='INFO')
+            layout.operator("humanbody.add_rig", text="Add Rig",
+                            icon='ARMATURE_DATA')
 
-def _draw_pose_body(layout, context):
-    """Draw logic for the Pose panel."""
-    obj = context.active_object
-    rig = _find_rig(obj) if obj else None
+    @staticmethod
+    def _draw_pose_body(layout, context):
+        """Draw logic for the Pose panel."""
+        obj = context.active_object
+        rig = Rigsuche._find_rig(obj) if obj else None
 
-    if not rig:
-        layout.label(text="Add a rig first", icon='INFO')
-        return
+        if not rig:
+            layout.label(text="Add a rig first", icon='INFO')
+            return
 
-    # Clear pose button
-    layout.operator("humanbody.clear_pose", text="Reset Pose", icon='LOOP_BACK')
-    layout.separator()
+        # Clear pose button
+        layout.operator("humanbody.clear_pose", text="Reset Pose", icon='LOOP_BACK')
+        layout.separator()
 
-    # List available poses
-    poses = _list_poses()
-    if not poses:
-        layout.label(text="No poses found", icon='INFO')
-        return
+        # List available poses
+        poses = Rigsuche._list_poses()
+        if not poses:
+            layout.label(text="No poses found", icon='INFO')
+            return
 
-    layout.label(text=f"{len(poses)} Poses:", icon='POSE_HLT')
-    col = layout.column(align=True)
-    for name, label in poses:
-        op = col.operator("humanbody.load_pose", text=label, icon='ARMATURE_DATA')
-        op.pose_name = name
+        layout.label(text=f"{len(poses)} Poses:", icon='POSE_HLT')
+        col = layout.column(align=True)
+        for name, label in poses:
+            op = col.operator("humanbody.load_pose", text=label, icon='ARMATURE_DATA')
+            op.pose_name = name
 
+    @staticmethod
+    def _draw_animation_body(layout, context):
+        """Draw logic for the Animation panel (BVH motion capture)."""
+        props = context.scene.humanbody
+        obj = context.active_object
+        rig = Rigsuche._find_rig(obj) if obj else None
 
-def _draw_animation_body(layout, context):
-    """Draw logic for the Animation panel (BVH motion capture)."""
-    props = context.scene.humanbody
-    obj = context.active_object
-    rig = _find_rig(obj) if obj else None
+        if not rig:
+            layout.label(text="Add a rig first", icon='INFO')
+            return
 
-    if not rig:
-        layout.label(text="Add a rig first", icon='INFO')
-        return
+        # Stop button + Speed slider
+        row = layout.row(align=True)
+        row.operator("humanbody.stop_animation", text="Stop", icon='CANCEL')
+        row.prop(props, "anim_speed", slider=True)
 
-    # Stop button + Speed slider
-    row = layout.row(align=True)
-    row.operator("humanbody.stop_animation", text="Stop", icon='CANCEL')
-    row.prop(props, "anim_speed", slider=True)
+        row = layout.row(align=True)
+        row.operator("humanbody.batch_retarget", text="Pre-cache All", icon='FILE_CACHE')
+        row.operator("humanbody.mocapnet_webui", text="", icon='URL')
+        layout.separator()
 
-    row = layout.row(align=True)
-    row.operator("humanbody.batch_retarget", text="Pre-cache All", icon='FILE_CACHE')
-    row.operator("humanbody.mocapnet_webui", text="", icon='URL')
-    layout.separator()
+        # Get animations
+        anims = Katalog._list_animations()
+        if not anims:
+            layout.label(text="No animations found", icon='INFO')
+            return
 
-    # Get animations
-    anims = _list_animations()
-    if not anims:
-        layout.label(text="No animations found", icon='INFO')
-        return
+        selected = props.anim_selected
+        ordered = [name for name, _ in _ANIM_CATEGORIES if name in anims]
+        if (not selected or selected not in anims) and ordered:
+            selected = ordered[0]
 
-    selected = props.anim_selected
-    ordered = [name for name, _ in _ANIM_CATEGORIES if name in anims]
-    if (not selected or selected not in anims) and ordered:
-        selected = ordered[0]
+        # Two-column layout: categories left, items right
+        split = layout.split(factor=0.25)
+        Weitereseite._anim_kategorien(split, anims, selected)
+        Weitereseite._anim_stuecke(split, anims.get(selected))
 
-    # Two-column layout: categories left, items right
-    split = layout.split(factor=0.25)
+    @staticmethod
+    def _anim_kategorien(split, anims, selected):
+        u"""LINKE SPALTE: je Kategorie ein Knopf mit Anzahl."""
+        left = split.column(align=True)
+        for cat_name, cat_icon in _ANIM_CATEGORIES:
+            if cat_name not in anims:
+                continue
+            count = len(anims[cat_name])
+            is_sel = (selected == cat_name)
+            op = left.operator("humanbody.select_anim_cat",
+                               text=f"{cat_name} ({count})",
+                               depress=is_sel, icon=cat_icon)
+            op.category = cat_name
 
-    # LEFT: category buttons
-    left = split.column(align=True)
-    for cat_name, cat_icon in _ANIM_CATEGORIES:
-        if cat_name not in anims:
-            continue
-        count = len(anims[cat_name])
-        is_sel = (selected == cat_name)
-        op = left.operator("humanbody.select_anim_cat",
-                           text=f"{cat_name} ({count})",
-                           depress=is_sel, icon=cat_icon)
-        op.category = cat_name
+    @staticmethod
+    def _anim_stuecke(split, eintraege):
+        u"""RECHTE SPALTE: je Animation eine Zeile.
 
-    # RIGHT: animation items
-    right = split.column()
-    if selected and selected in anims:
+        Eine BVH-Datei bekommt einen zweiten Knopf: den Dreifachvergleich
+        (`load_bvh_native`), der BVH-Skelett, Rokoko und KBS
+        nebeneinanderstellt. Eine gerechnete Bewegung hat nichts zu
+        vergleichen und bekommt nur den Abspielknopf.
+        """
+        right = split.column()
+        if not eintraege:
+            return
         col = right.column(align=True)
-        for label, path in anims[selected]:
+        for label, path in eintraege:
             is_bvh = not path.startswith(_PROC_PREFIX)
+            ziel = col.row(align=True) if is_bvh else col
+            op = ziel.operator("humanbody.load_animation",
+                               text=label, icon='PLAY')
+            op.bvh_path = path
+            op.anim_name = label
             if is_bvh:
-                row = col.row(align=True)
-                op = row.operator("humanbody.load_animation",
-                                  text=label, icon='PLAY')
-                op.bvh_path = path
-                op.anim_name = label
-                op2 = row.operator("humanbody.load_bvh_native",
-                                   text="", icon='IMPORT')
+                op2 = ziel.operator("humanbody.load_bvh_native",
+                                    text="", icon='IMPORT')
                 op2.bvh_path = path
                 op2.anim_name = label
-            else:
-                op = col.operator("humanbody.load_animation",
-                                  text=label, icon='PLAY')
-                op.bvh_path = path
-                op.anim_name = label
 
+    @staticmethod
+    def _draw_randomize_body(layout, context):
+        """Draw logic for the Randomize panel."""
+        props = context.scene.humanbody
+        layout.prop(props, "randomize_strength", slider=True)
+        layout.operator("humanbody.randomize", icon='RNDCURVE')
 
-def _draw_randomize_body(layout, context):
-    """Draw logic for the Randomize panel."""
-    props = context.scene.humanbody
-    layout.prop(props, "randomize_strength", slider=True)
-    layout.operator("humanbody.randomize", icon='RNDCURVE')
+    @staticmethod
+    def _draw_finalize_body(layout, context):
+        """Draw logic for the Finalize panel."""
+        layout.label(text="Bake current shape into mesh:", icon='INFO')
+        layout.operator("humanbody.finalize", icon='CHECKMARK')
 
+    @staticmethod
+    def _draw_file_io_body(layout, context):
+        """Draw logic for the File I/O panel."""
+        has_char = Koerperseite._poll_humanbody(context)
+        if has_char:
+            row = layout.row(align=True)
+            row.operator("humanbody.export_character", icon='EXPORT')
+            row.operator("humanbody.import_settings", icon='IMPORT')
+            layout.separator()
 
-def _draw_finalize_body(layout, context):
-    """Draw logic for the Finalize panel."""
-    layout.label(text="Bake current shape into mesh:", icon='INFO')
-    layout.operator("humanbody.finalize", icon='CHECKMARK')
-
-
-def _draw_file_io_body(layout, context):
-    """Draw logic for the File I/O panel."""
-    has_char = _poll_humanbody(context)
-    if has_char:
-        row = layout.row(align=True)
-        row.operator("humanbody.export_character", icon='EXPORT')
-        row.operator("humanbody.import_settings", icon='IMPORT')
-        layout.separator()
-
-    layout.operator("humanbody.import_character", icon='MESH_DATA',
-                     text="Import New Character")
+        layout.operator("humanbody.import_character", icon='MESH_DATA',
+                         text="Import New Character")

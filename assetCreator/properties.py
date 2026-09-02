@@ -30,13 +30,19 @@ CATEGORY_PRESETS = {
 }
 
 
-def _on_category_change(self, context):
-    """Auto-set Z-range and arm toggle from category preset."""
-    preset = CATEGORY_PRESETS.get(self.category)
-    if preset:
-        self.z_min = preset["z_min"]
-        self.z_max = preset["z_max"]
-        self.include_arms = preset["include_arms"]
+class Assetfelder:
+    u"""Die frueheren Modulfunktionen, gebuendelt."""
+
+    @staticmethod
+    def _on_category_change(self, context):
+        """Auto-set Z-range and arm toggle from category preset."""
+        preset = CATEGORY_PRESETS.get(self.category)
+        if preset:
+            self.z_min = preset["z_min"]
+            self.z_max = preset["z_max"]
+            self.include_arms = preset["include_arms"]
+
+
 
 
 class HumanBodyAssetCreatorProps(bpy.types.PropertyGroup):
@@ -50,7 +56,7 @@ class HumanBodyAssetCreatorProps(bpy.types.PropertyGroup):
         name="Category",
         items=ASSET_CATEGORIES,
         default="Tops",
-        update=_on_category_change,
+        update=Assetfelder._on_category_change,
     )
 
     # --- Mode ---

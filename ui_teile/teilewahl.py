@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
+from .charakterwahl import Charakterwahl
 import bpy
-from .zonen import _build_zone_data
-from .zonen import _draw_zone_highlight
-from .zonen import _position_to_category
+from .zonen import Zonen
 from .zustand import Anzeigezustand
 
 
@@ -43,7 +42,7 @@ class HUMANBODY_OT_pick_part(bpy.types.Operator):
             return {'PASS_THROUGH'}
 
         if event.type == 'MOUSEMOVE':
-            result = self._raycast(context, event)
+            result = self._ray_cast(context, event)
             new_cat = result or ""
             if new_cat != Anzeigezustand.kategorie_unter_maus:
                 Anzeigezustand.kategorie_unter_maus = new_cat
@@ -89,32 +88,44 @@ class HUMANBODY_OT_pick_part(bpy.types.Operator):
             return {'FINISHED'}
 
         # Find the HumanBody object
-        obj = context.active_object
-        if not obj or not obj.data.get("humanbody"):
-            for o in context.scene.objects:
-                if o.type == 'MESH' and o.data.get("humanbody"):
-                    obj = o
-                    break
+        obj = Charakterwahl.aktiv_oder_erster(context)
         if not obj:
             self.report({'WARNING'}, "No HumanBody object found")
             return {'CANCELLED'}
 
-        # Set up new pick mode session
+        self._sitzung_beginnen(context, obj)
+        self._fenster_richten(context, v3d_area)
+        self._modal_anhaengen(context, v3d_area, v3d_region)
+        return {'RUNNING_MODAL'}
+
+    # ------------------------------------------------------------ Bausteine
+
+    def _sitzung_beginnen(self, context, obj):
+        u"""Zonendaten aufbauen und den Zeichner anmelden.
+
+        `Anzeigezustand.lauf` zaehlt hoch und wird gemerkt: Ein noch
+        laufender modaler Handler aus einem frueheren Aufruf sieht daran,
+        dass er nicht mehr gemeint ist, und beendet sich selbst. Ohne
+        diesen Zaehler zeichnen zwei Handler uebereinander.
+        """
         Anzeigezustand.lauf += 1
         self._my_gen = Anzeigezustand.lauf
 
-        Anzeigezustand.zonendreiecke, Anzeigezustand.flaeche_zu_kategorie = _build_zone_data(obj, context)
+        Anzeigezustand.zonendreiecke, Anzeigezustand.flaeche_zu_kategorie = Zonen._build_zone_data(obj, context)
 
         if Anzeigezustand.zeichner is not None:
             bpy.types.SpaceView3D.draw_handler_remove(Anzeigezustand.zeichner, 'WINDOW')
         Anzeigezustand.zeichner = bpy.types.SpaceView3D.draw_handler_add(
-            _draw_zone_highlight, (), 'WINDOW', 'POST_VIEW')
+            Zonen._draw_zone_highlight, (), 'WINDOW', 'POST_VIEW')
 
         Anzeigezustand.wahl_laeuft = True
         Anzeigezustand.kategorie_unter_maus = ""
         Anzeigezustand.stapel = None
         Anzeigezustand.stapel_kategorie = ""
 
+    @staticmethod
+    def _fenster_richten(context, v3d_area):
+        u"""Seitenleiste einblenden und den Zeiger umstellen."""
         # Ensure sidebar is visible in the VIEW_3D area
         for space in v3d_area.spaces:
             if space.type == 'VIEW_3D':
@@ -123,19 +134,21 @@ class HUMANBODY_OT_pick_part(bpy.types.Operator):
 
         context.window.cursor_set('EYEDROPPER')
 
-        # If we are NOT already in the VIEW_3D area, re-invoke with
-        # a context override so the modal handler is bound to VIEW_3D.
+    def _modal_anhaengen(self, context, v3d_area, v3d_region):
+        u"""Den modalen Handler an den 3D-Bereich binden.
+
+        Wird der Operator aus einem anderen Bereich gestartet (dem
+        Bedienfeld etwa), haengt der Handler sonst dort — und bekommt die
+        Mausbewegungen im 3D-Fenster nie zu sehen. Der `temp_override`
+        bindet ihn an den richtigen Bereich.
+        """
+        v3d_area.header_text_set(
+            "Pick Mode: hover over model — ESC to exit")
         if context.area != v3d_area and v3d_region is not None:
-            v3d_area.header_text_set(
-                "Pick Mode: hover over model — ESC to exit")
             with context.temp_override(area=v3d_area, region=v3d_region):
                 context.window_manager.modal_handler_add(self)
         else:
-            v3d_area.header_text_set(
-                "Pick Mode: hover over model — ESC to exit")
             context.window_manager.modal_handler_add(self)
-
-        return {'RUNNING_MODAL'}
 
     def _do_cleanup(self, context):
         """Full cleanup."""
@@ -172,7 +185,7 @@ class HUMANBODY_OT_pick_part(bpy.types.Operator):
         if self._my_gen == Anzeigezustand.lauf:
             self._do_cleanup(context)
 
-    def _raycast(self, context, event):
+    def _ray_cast(self, context, event):
         """Raycast from mouse into scene, return body part category or None.
 
         Uses the evaluated (deformed) mesh for hit detection, but looks up
@@ -191,12 +204,7 @@ class HUMANBODY_OT_pick_part(bpy.types.Operator):
         origin = region_2d_to_origin_3d(region, rv3d, coord)
         direction = region_2d_to_vector_3d(region, rv3d, coord)
 
-        obj = context.active_object
-        if not obj or not obj.data.get("humanbody"):
-            for o in context.scene.objects:
-                if o.type == 'MESH' and o.data.get("humanbody"):
-                    obj = o
-                    break
+        obj = Charakterwahl.aktiv_oder_erster(context)
         if not obj:
             return None
 
@@ -219,8 +227,8 @@ class HUMANBODY_OT_pick_part(bpy.types.Operator):
         # Fallback: use the REST-pose face center from original mesh
         if face_idx < len(obj.data.polygons):
             rest_center = obj.matrix_world @ obj.data.polygons[face_idx].center
-            return _position_to_category(rest_center)
+            return Zonen._position_to_category(rest_center)
 
         # Last resort: deformed world position (for subdivided meshes)
         world_pos = eval_obj.matrix_world @ loc
-        return _position_to_category(world_pos)
+        return Zonen._position_to_category(world_pos)
