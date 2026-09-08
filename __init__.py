@@ -3,7 +3,7 @@
 bl_info = {
     "name": "HumanBody",
     "author": "Edgar",
-    "version": (0, 0, 56),
+    "version": (0, 0, 57),
     "blender": (5, 0, 0),
     "location": "View3D > Sidebar > HumanBody",
     "description": "Parametric Human Body with animation and film creation",
