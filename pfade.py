@@ -43,7 +43,7 @@ class Projektpfade:
 
     @classmethod
     def humanbody(cls):
-        u"""`HumanBody/` — Netze, Morphs, Gewichte, Animationen."""
+        u"""`HumanBody/` — Netze, Morphs, Gewichte, Posen."""
         return cls.tools() / 'HumanBody'
 
     @classmethod
@@ -52,14 +52,26 @@ class Projektpfade:
         return cls.humanbody() / 'data'
 
     @classmethod
+    def objekte(cls):
+        u"""`A:/3DTools/3DObjects` — die grossen 3D-Inhalte.
+
+        Seit dem 08.09.2026 liegen `animations`, `garment_library`,
+        `assets` und `photoTo3D` NICHT mehr unter `HumanBody/data`
+        (Edgar: „verschiebe den kompletten Ordner … der nicht direkt zu
+        HumanBody gehoert in: A:/3DTools/3DObjects"). Der Ordner ist
+        bewusst nicht versioniert.
+        """
+        return cls.tools() / '3DObjects'
+
+    @classmethod
     def bvh(cls):
         u"""Wo die BVH-Dateien liegen."""
-        return cls.daten() / 'animations' / 'bvh'
+        return cls.objekte() / 'animations' / 'bvh'
 
     @classmethod
     def assets(cls):
         u"""Kleidung und Zubehoer."""
-        return cls.daten() / 'assets'
+        return cls.objekte() / 'assets'
 
     @classmethod
     def frisuren(cls):
