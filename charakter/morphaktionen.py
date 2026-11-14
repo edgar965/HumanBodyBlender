@@ -89,7 +89,7 @@ class Morphaktionen:
             return False, "No morph data loaded"
 
         m.update()
-        new_basis = m.morphed.copy()
+        new_basis = m.morphed.clone() if hasattr(m.morphed, 'clone') else m.morphed.copy()       # torch-Tensor seit 14.11.2026
         m.basis = new_basis
 
         lm = char_defaults.l2_mass

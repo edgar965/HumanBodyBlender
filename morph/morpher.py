@@ -55,7 +55,7 @@ class Morpher:
             logger.warning("Unknown body type: %s", body_type)
             return
         self.body_type = body_type
-        self.basis = morph_data.l1[body_type].copy()
+        self.basis = morph_data.l1[body_type].clone() if hasattr(morph_data.l1[body_type], "clone") else morph_data.l1[body_type].copy()     # torch-Tensor seit 14.11.2026
         self.l2_morphs, self.l2_combo = morph_data.get_l2_for_type(body_type)
         self.morphed = None
         self._needs_full_reset = True
@@ -188,8 +188,9 @@ class Morpher:
         self._l2_anwenden(obj_data)
         self._kombi_anwenden(obj_data)
 
-        # Write to Blender mesh
-        self.obj.data.vertices.foreach_set("co", self.morphed.ravel())
+        # Write to Blender mesh — `humanbody_core` rechnet seit 14.11.2026 auf der Karte: EINE Kopie zur CPU (je Wert einzeln wäre je Zahl ein Warten)
+        werte = self.morphed.ravel()
+        self.obj.data.vertices.foreach_set("co", werte.cpu().numpy() if hasattr(werte, 'cpu') else werte)
         self.obj.data.update()
 
     # ------------------------------------------------------------ Bausteine
@@ -203,7 +204,7 @@ class Morpher:
         vorhandene Feld — das spart eine Zuteilung je Aktualisierung.
         """
         if self.morphed is None:
-            self.morphed = self.basis.copy()
+            self.morphed = self.basis.clone() if hasattr(self.basis, 'clone') else self.basis.copy()     # torch-Tensor seit 14.11.2026
             self._needs_full_reset = False
             return
         self.morphed[:] = self.basis

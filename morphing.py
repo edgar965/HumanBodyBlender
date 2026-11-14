@@ -16,6 +16,11 @@ import logging
 HUMANBODY_ROOT = str(Projektpfade.humanbody())
 if HUMANBODY_ROOT not in sys.path:
     sys.path.insert(0, HUMANBODY_ROOT)
+# `humanbody_core` rechnet seit 14.11.2026 mit torch und braucht `KoerperKI_alle` (Torchfeld, Npztorch) aus der Wurzel — hinten angehängt, damit kein Ordner der
+# Wurzel ein Blender-Modul verdeckt. torch steht in Blenders Python (13.11.2026).
+TOOLS_ROOT = str(Projektpfade.tools())
+if TOOLS_ROOT not in sys.path:
+    sys.path.append(TOOLS_ROOT)
 
 
 # Die Bauteile liegen in `morph/`. Hier bleibt, was Blender
